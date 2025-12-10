@@ -1,15 +1,13 @@
 <?php
 // =============================================
-// ADMIN SETTINGS - PTUN WEBSITE (UPDATED)
-// C:\laragon\www\ptun-website\admin\setting\index.php
-// WITH DYNAMIC ABSENSI & SERTIFIKAT SETTINGS
+// ADMIN SETTINGS - FULL CONFIGURATION
 // =============================================
 
 require_once '../../config/database.php';
-session_start();
 
+// Cek Login Admin
 if(!isset($_SESSION['user_id']) || $_SESSION['role'] != 'admin') {
-    header('Location: ../../login/');
+    header('Location: ' . BASE_URL . '/login/');
     exit;
 }
 
@@ -17,7 +15,7 @@ if(!isset($_SESSION['user_id']) || $_SESSION['role'] != 'admin') {
 if(isset($_POST['update_settings'])) {
     $group = $_POST['group'];
     
-    // Handle logo upload
+    // 1. Handle Logo Upload
     if(isset($_FILES['logo_url']) && $_FILES['logo_url']['error'] == 0) {
         $target_dir = "../../uploads/logos/";
         if(!is_dir($target_dir)) mkdir($target_dir, 0755, true);
@@ -26,17 +24,35 @@ if(isset($_POST['update_settings'])) {
         $new_filename = 'logo_' . time() . '.' . $file_ext;
         $target_file = $target_dir . $new_filename;
         
+        // Hapus logo lama jika ada (opsional, untuk kebersihan server)
+        $old_logo = get_setting('logo_url');
+        if($old_logo && file_exists("../.." . $old_logo)) {
+            @unlink("../.." . $old_logo);
+        }
+
         if(move_uploaded_file($_FILES['logo_url']['tmp_name'], $target_file)) {
-            $stmt = db()->prepare("UPDATE settings SET value=? WHERE `key`='logo_url'");
-            $stmt->execute(['/uploads/logos/' . $new_filename]);
+            $stmt = db()->prepare("INSERT INTO settings (`key`, `value`, `group`) VALUES ('logo_url', ?, 'institusi') ON DUPLICATE KEY UPDATE `value`=?");
+            $val = '/uploads/logos/' . $new_filename;
+            $stmt->execute([$val, $val]);
         }
     }
     
-    // Update other settings
+    // 2. Update Text Settings
+    // List key yang diizinkan untuk update massal
+    $allowed_keys = [
+        'nama_website', 'nama_panjang', 'tagline', 'alamat_lengkap', 'no_telepon', 'email_kontak',
+        'kota_instansi', 'kepala_nama', 'kepala_nip', 'kepala_jabatan', 'pembimbing_nama', 'pembimbing_nip',
+        'copyright_text', 'social_facebook', 'social_instagram',
+        'menu_beranda', 'menu_tentang', 'menu_layanan',
+        'maintenance_mode', 'absensi_start_date', 'absensi_max_hari', 'aktivitas_max_perday',
+        'sertifikat_min_hadir', 'sertifikat_min_score', 'sertifikat_bobot_hadir', 'sertifikat_bobot_laporan'
+    ];
+
+    $stmt = db()->prepare("INSERT INTO settings (`key`, `value`, `group`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE `value`=?");
+    
     foreach($_POST as $key => $value) {
-        if($key != 'update_settings' && $key != 'group') {
-            $stmt = db()->prepare("UPDATE settings SET value=? WHERE `key`=?");
-            $stmt->execute([$value, $key]);
+        if(in_array($key, $allowed_keys)) {
+            $stmt->execute([$key, $value, $group, $value]);
         }
     }
     
@@ -44,314 +60,241 @@ if(isset($_POST['update_settings'])) {
     exit;
 }
 
-// GET ALL SETTINGS GROUPED
-$stmt = db()->query("SELECT * FROM settings ORDER BY `group`, `order`");
-$all_settings = $stmt->fetchAll(PDO::FETCH_GROUP);
-
 $active_tab = $_GET['tab'] ?? 'institusi';
+$page_title = 'Pengaturan Sistem';
+require_once '../includes/header.php';
 ?>
-<!DOCTYPE html>
-<html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Settings - <?= get_site_name() ?></title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-</head>
-<body class="bg-gray-50">
-
-<?php require_once '../includes/header.php'; ?>
-
-<nav class="bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg sticky top-0 z-50">
-    <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-        <div class="flex items-center space-x-4">
-            <a href="../" class="text-white hover:text-blue-100">
-                <i class="fas fa-arrow-left text-xl"></i>
-            </a>
-            <h1 class="text-2xl font-bold">Settings Website</h1>
-        </div>
-        <a href="../" class="bg-white/20 hover:bg-white/30 px-6 py-2 rounded-xl font-semibold transition-all">
-            <i class="fas fa-home mr-2"></i>Dashboard
-        </a>
-    </div>
-</nav>
 
 <div class="max-w-7xl mx-auto px-6 py-8">
 
     <?php if(isset($_GET['msg'])): ?>
-    <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-lg mb-8">
-        <i class="fas fa-check-circle text-xl mr-2"></i>
-        <span class="font-semibold">Settings berhasil diupdate!</span>
+    <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-lg mb-8 shadow-sm flex items-center">
+        <i class="fas fa-check-circle text-xl mr-3"></i>
+        <span class="font-semibold">Pengaturan berhasil diperbarui!</span>
     </div>
     <?php endif; ?>
 
-    <!-- TABS -->
-    <div class="bg-white rounded-3xl shadow-xl overflow-hidden">
-        <div class="flex border-b border-gray-200 overflow-x-auto">
+    <div class="bg-white rounded-3xl shadow-xl overflow-hidden mb-8">
+        <div class="flex border-b border-gray-200 overflow-x-auto bg-gray-50">
             <button onclick="showTab('institusi')" id="tab-institusi" 
-                    class="tab-btn flex-1 px-6 py-4 font-bold text-gray-700 hover:bg-gray-50 transition-all <?= $active_tab=='institusi' ? 'border-b-4 border-blue-600 text-blue-600' : '' ?>">
-                <i class="fas fa-building mr-2"></i>Institusi
-            </button>
-            <button onclick="showTab('footer')" id="tab-footer" 
-                    class="tab-btn flex-1 px-6 py-4 font-bold text-gray-700 hover:bg-gray-50 transition-all <?= $active_tab=='footer' ? 'border-b-4 border-blue-600 text-blue-600' : '' ?>">
-                <i class="fas fa-link mr-2"></i>Footer
-            </button>
-            <button onclick="showTab('menu')" id="tab-menu" 
-                    class="tab-btn flex-1 px-6 py-4 font-bold text-gray-700 hover:bg-gray-50 transition-all <?= $active_tab=='menu' ? 'border-b-4 border-blue-600 text-blue-600' : '' ?>">
-                <i class="fas fa-bars mr-2"></i>Menu
+                    class="tab-btn flex-1 px-6 py-4 font-bold text-gray-700 hover:bg-white hover:text-blue-600 transition-all border-b-4 border-transparent <?= $active_tab=='institusi' ? '!border-blue-600 !text-blue-600 bg-white' : '' ?>">
+                <i class="fas fa-university mr-2"></i>Institusi & Pejabat
             </button>
             <button onclick="showTab('sistem')" id="tab-sistem" 
-                    class="tab-btn flex-1 px-6 py-4 font-bold text-gray-700 hover:bg-gray-50 transition-all <?= $active_tab=='sistem' ? 'border-b-4 border-blue-600 text-blue-600' : '' ?>">
-                <i class="fas fa-cog mr-2"></i>Sistem
+                    class="tab-btn flex-1 px-6 py-4 font-bold text-gray-700 hover:bg-white hover:text-blue-600 transition-all border-b-4 border-transparent <?= $active_tab=='sistem' ? '!border-blue-600 !text-blue-600 bg-white' : '' ?>">
+                <i class="fas fa-cogs mr-2"></i>Sistem & Penilaian
+            </button>
+            <button onclick="showTab('tampilan')" id="tab-tampilan" 
+                    class="tab-btn flex-1 px-6 py-4 font-bold text-gray-700 hover:bg-white hover:text-blue-600 transition-all border-b-4 border-transparent <?= $active_tab=='tampilan' ? '!border-blue-600 !text-blue-600 bg-white' : '' ?>">
+                <i class="fas fa-desktop mr-2"></i>Tampilan & Menu
             </button>
         </div>
 
-        <!-- TAB CONTENT: INSTITUSI -->
         <div id="content-institusi" class="tab-content p-8 <?= $active_tab!='institusi' ? 'hidden' : '' ?>">
-            <h2 class="text-2xl font-bold text-gray-900 mb-6">Informasi Institusi</h2>
             <form method="POST" enctype="multipart/form-data">
                 <input type="hidden" name="group" value="institusi">
-                <div class="space-y-6">
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Nama Website</label>
-                        <input type="text" name="nama_website" value="<?= get_setting('nama_website') ?>" 
-                               class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="space-y-5">
+                        <h3 class="text-lg font-bold text-gray-800 border-b pb-2 mb-4">Identitas Instansi</h3>
+                        
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Nama Website (Singkat)</label>
+                            <input type="text" name="nama_website" value="<?= get_setting('nama_website') ?>" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2 focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Nama Lengkap Instansi</label>
+                            <input type="text" name="nama_panjang" value="<?= get_setting('nama_panjang') ?>" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2 focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Tagline / Slogan</label>
+                            <input type="text" name="tagline" value="<?= get_setting('tagline') ?>" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2 focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Kota Instansi (Untuk Surat)</label>
+                            <input type="text" name="kota_instansi" value="<?= get_setting('kota_instansi', 'Banjarmasin') ?>" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2 focus:border-blue-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Logo Instansi</label>
+                            <div class="flex items-center gap-4 bg-gray-50 p-3 rounded-xl border border-gray-200">
+                                <?php if(get_setting('logo_url')): ?>
+                                    <img src="<?= BASE_URL . get_setting('logo_url') ?>" class="h-12 w-auto object-contain">
+                                <?php endif; ?>
+                                <input type="file" name="logo_url" accept="image/*" class="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                            </div>
+                        </div>
                     </div>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Nama Lengkap Institusi</label>
-                        <input type="text" name="nama_panjang" value="<?= get_setting('nama_panjang') ?>" 
-                               class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Tagline</label>
-                        <input type="text" name="tagline" value="<?= get_setting('tagline') ?>" 
-                               class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Logo</label>
-                        <input type="file" name="logo_url" accept="image/*" 
-                               class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
-                        <p class="text-sm text-gray-500 mt-2">Logo saat ini: <?= get_setting('logo_url') ?></p>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Alamat Lengkap</label>
-                        <textarea name="alamat_lengkap" rows="3" 
-                                  class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500"><?= get_setting('alamat_lengkap') ?></textarea>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">No. Telepon</label>
-                        <input type="text" name="no_telepon" value="<?= get_setting('no_telepon') ?>" 
-                               class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Email Kontak</label>
-                        <input type="email" name="email_kontak" value="<?= get_setting('email_kontak') ?>" 
-                               class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
+
+                    <div class="space-y-6">
+                        <h3 class="text-lg font-bold text-gray-800 border-b pb-2 mb-4">Pejabat Penandatangan</h3>
+                        
+                        <div class="bg-blue-50 p-5 rounded-2xl border border-blue-100">
+                            <label class="block text-sm font-bold text-blue-800 mb-3 uppercase tracking-wider">Kepala Instansi (TTD Sertifikat)</label>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="text-xs font-semibold text-gray-500">Nama Lengkap & Gelar</label>
+                                    <input type="text" name="kepala_nama" value="<?= get_setting('kepala_nama') ?>" class="w-full border border-blue-200 rounded-lg px-3 py-2">
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="text-xs font-semibold text-gray-500">NIP (Opsional)</label>
+                                        <input type="text" name="kepala_nip" value="<?= get_setting('kepala_nip') ?>" class="w-full border border-blue-200 rounded-lg px-3 py-2">
+                                    </div>
+                                    <div>
+                                        <label class="text-xs font-semibold text-gray-500">Jabatan</label>
+                                        <input type="text" name="kepala_jabatan" value="<?= get_setting('kepala_jabatan', 'Kepala Instansi') ?>" class="w-full border border-blue-200 rounded-lg px-3 py-2">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-green-50 p-5 rounded-2xl border border-green-100">
+                            <label class="block text-sm font-bold text-green-800 mb-3 uppercase tracking-wider">Pembimbing Lapangan (TTD Nilai)</label>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="text-xs font-semibold text-gray-500">Nama Lengkap & Gelar</label>
+                                    <input type="text" name="pembimbing_nama" value="<?= get_setting('pembimbing_nama') ?>" class="w-full border border-green-200 rounded-lg px-3 py-2">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-semibold text-gray-500">NIP (Opsional)</label>
+                                    <input type="text" name="pembimbing_nip" value="<?= get_setting('pembimbing_nip') ?>" class="w-full border border-green-200 rounded-lg px-3 py-2">
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <button type="submit" name="update_settings" 
-                        class="mt-8 bg-gradient-to-r from-blue-500 to-blue-600 text-white px-8 py-4 rounded-xl font-bold hover:shadow-lg transition-all">
-                    <i class="fas fa-save mr-2"></i>Simpan Perubahan
-                </button>
+
+                <div class="mt-8 pt-6 border-t border-gray-100">
+                    <button type="submit" name="update_settings" class="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 hover:shadow-lg transition-all flex items-center">
+                        <i class="fas fa-save mr-2"></i> Simpan Perubahan Institusi
+                    </button>
+                </div>
             </form>
         </div>
 
-        <!-- TAB CONTENT: FOOTER -->
-        <div id="content-footer" class="tab-content p-8 <?= $active_tab!='footer' ? 'hidden' : '' ?>">
-            <h2 class="text-2xl font-bold text-gray-900 mb-6">Footer & Social Media</h2>
-            <form method="POST">
-                <input type="hidden" name="group" value="footer">
-                <div class="space-y-6">
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Copyright Text</label>
-                        <input type="text" name="copyright_text" value="<?= get_setting('copyright_text') ?>" 
-                               class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Facebook URL</label>
-                        <input type="url" name="social_facebook" value="<?= get_setting('social_facebook') ?>" 
-                               class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Instagram URL</label>
-                        <input type="url" name="social_instagram" value="<?= get_setting('social_instagram') ?>" 
-                               class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
-                    </div>
-                </div>
-                <button type="submit" name="update_settings" 
-                        class="mt-8 bg-gradient-to-r from-blue-500 to-blue-600 text-white px-8 py-4 rounded-xl font-bold hover:shadow-lg transition-all">
-                    <i class="fas fa-save mr-2"></i>Simpan Perubahan
-                </button>
-            </form>
-        </div>
-
-        <!-- TAB CONTENT: MENU -->
-        <div id="content-menu" class="tab-content p-8 <?= $active_tab!='menu' ? 'hidden' : '' ?>">
-            <h2 class="text-2xl font-bold text-gray-900 mb-6">Menu Navigasi</h2>
-            <p class="text-gray-600 mb-6">Format: <code class="bg-gray-100 px-2 py-1 rounded">Judul|/url</code></p>
-            <form method="POST">
-                <input type="hidden" name="group" value="menu">
-                <div class="space-y-6">
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Menu Beranda</label>
-                        <input type="text" name="menu_beranda" value="<?= get_setting('menu_beranda') ?>" 
-                               class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Menu Tentang</label>
-                        <input type="text" name="menu_tentang" value="<?= get_setting('menu_tentang') ?>" 
-                               class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Menu Layanan</label>
-                        <input type="text" name="menu_layanan" value="<?= get_setting('menu_layanan') ?>" 
-                               class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
-                    </div>
-                </div>
-                <button type="submit" name="update_settings" 
-                        class="mt-8 bg-gradient-to-r from-blue-500 to-blue-600 text-white px-8 py-4 rounded-xl font-bold hover:shadow-lg transition-all">
-                    <i class="fas fa-save mr-2"></i>Simpan Perubahan
-                </button>
-            </form>
-        </div>
-
-        <!-- TAB CONTENT: SISTEM (UPDATED WITH DYNAMIC SETTINGS) -->
         <div id="content-sistem" class="tab-content p-8 <?= $active_tab!='sistem' ? 'hidden' : '' ?>">
-            <h2 class="text-2xl font-bold text-gray-900 mb-6">Pengaturan Sistem</h2>
             <form method="POST">
                 <input type="hidden" name="group" value="sistem">
                 
-                <!-- GENERAL SISTEM -->
-                <div class="bg-gradient-to-r from-blue-50 to-blue-100 rounded-2xl p-6 mb-8">
-                    <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
-                        <i class="fas fa-cogs text-blue-600 mr-3"></i>
-                        Pengaturan Umum
-                    </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div class="space-y-6">
-                        <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-2">Maintenance Mode</label>
-                            <select name="maintenance_mode" class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
-                                <option value="0" <?= get_setting('maintenance_mode')=='0' ? 'selected' : '' ?>>Non-Aktif</option>
-                                <option value="1" <?= get_setting('maintenance_mode')=='1' ? 'selected' : '' ?>>Aktif</option>
-                            </select>
+                        <div class="bg-purple-50 p-5 rounded-2xl border border-purple-100">
+                            <h3 class="font-bold text-purple-900 mb-4">Pengaturan Operasional</h3>
+                            
+                            <div class="mb-4">
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Maksimal Hari Kerja/Bulan</label>
+                                <input type="number" name="absensi_max_hari" min="1" max="31" value="<?= get_setting('absensi_max_hari', 22) ?>" class="w-full border border-purple-200 rounded-lg px-3 py-2">
+                                <p class="text-xs text-gray-500 mt-1">Digunakan untuk menghitung % kehadiran.</p>
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Max Aktivitas Harian</label>
+                                <input type="number" name="aktivitas_max_perday" min="1" max="20" value="<?= get_setting('aktivitas_max_perday', 5) ?>" class="w-full border border-purple-200 rounded-lg px-3 py-2">
+                            </div>
+
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Mode Maintenance</label>
+                                <select name="maintenance_mode" class="w-full border border-purple-200 rounded-lg px-3 py-2 bg-white">
+                                    <option value="0" <?= get_setting('maintenance_mode')=='0' ? 'selected' : '' ?>>Website Online (Normal)</option>
+                                    <option value="1" <?= get_setting('maintenance_mode')=='1' ? 'selected' : '' ?>>Website Offline (Perbaikan)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
+                        <div class="bg-orange-50 p-5 rounded-2xl border border-orange-100">
+                            <h3 class="font-bold text-orange-900 mb-4">Bobot Penilaian & Sertifikat</h3>
+                            
+                            <div class="grid grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Min. Kehadiran (%)</label>
+                                    <input type="number" name="sertifikat_min_hadir" value="<?= get_setting('sertifikat_min_hadir', 80) ?>" class="w-full border border-orange-200 rounded-lg px-3 py-2">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Min. Nilai Akhir</label>
+                                    <input type="number" name="sertifikat_min_score" value="<?= get_setting('sertifikat_min_score', 75) ?>" class="w-full border border-orange-200 rounded-lg px-3 py-2">
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Bobot Kehadiran (%)</label>
+                                    <input type="number" name="sertifikat_bobot_hadir" value="<?= get_setting('sertifikat_bobot_hadir', 60) ?>" class="w-full border border-orange-200 rounded-lg px-3 py-2">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-bold text-gray-700 mb-1">Bobot Laporan (%)</label>
+                                    <input type="number" name="sertifikat_bobot_laporan" value="<?= get_setting('sertifikat_bobot_laporan', 40) ?>" class="w-full border border-orange-200 rounded-lg px-3 py-2">
+                                </div>
+                            </div>
+                            
+                            <div class="mt-4 p-3 bg-white rounded-lg border border-orange-200 text-xs text-gray-600">
+                                <p><strong>Info:</strong> Total bobot disarankan 100%. Rumus nilai akhir sertifikat menggunakan kalkulasi otomatis berdasarkan bobot ini jika admin tidak memasukkan nilai manual.</p>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- ABSENSI DINAMIS -->
-                <div class="bg-gradient-to-r from-green-50 to-emerald-100 rounded-2xl p-6 mb-8">
-                    <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
-                        <i class="fas fa-calendar-check text-green-600 mr-3"></i>
-                        Pengaturan Absensi
-                    </h3>
-                    <div class="space-y-6">
-                        <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-2">Tanggal Mulai Absensi</label>
-                            <input type="date" name="absensi_start_date" value="<?= get_setting('absensi_start_date') ?>" 
-                                   class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
+                <div class="mt-8 pt-6 border-t border-gray-100">
+                    <button type="submit" name="update_settings" class="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 hover:shadow-lg transition-all flex items-center">
+                        <i class="fas fa-save mr-2"></i> Simpan Pengaturan Sistem
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div id="content-tampilan" class="tab-content p-8 <?= $active_tab!='tampilan' ? 'hidden' : '' ?>">
+            <form method="POST">
+                <input type="hidden" name="group" value="tampilan">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-800 mb-4">Informasi Footer</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Teks Copyright</label>
+                                <input type="text" name="copyright_text" value="<?= get_setting('copyright_text') ?>" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Alamat Lengkap (Footer)</label>
+                                <textarea name="alamat_lengkap" rows="3" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2"><?= get_setting('alamat_lengkap') ?></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">No. Telepon / WA</label>
+                                <input type="text" name="no_telepon" value="<?= get_setting('no_telepon') ?>" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Email Kontak</label>
+                                <input type="email" name="email_kontak" value="<?= get_setting('email_kontak') ?>" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2">
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-2">
-                                Maksimal Hari Kerja
-                                <span class="text-gray-500 font-normal">(untuk kalkulasi persentase kehadiran)</span>
-                            </label>
-                            <input type="number" name="absensi_max_hari" min="1" max="31" 
-                                   value="<?= get_setting('absensi_max_hari', 22) ?>" 
-                                   class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
-                            <p class="text-sm text-gray-600 mt-2">
-                                <i class="fas fa-info-circle mr-1"></i>
-                                Saat ini: <strong><?= get_setting('absensi_max_hari', 22) ?> hari</strong>
-                            </p>
+                    </div>
+
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-800 mb-4">Media Sosial & Menu</h3>
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Facebook URL</label>
+                                <input type="text" name="social_facebook" value="<?= get_setting('social_facebook') ?>" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Instagram URL</label>
+                                <input type="text" name="social_instagram" value="<?= get_setting('social_instagram') ?>" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2">
+                            </div>
+                            <hr class="my-4">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Label Menu Beranda</label>
+                                <input type="text" name="menu_beranda" value="<?= get_setting('menu_beranda', 'Beranda|/') ?>" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2 font-mono text-sm">
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- PERKARA SETTINGS -->
-                <div class="bg-gradient-to-r from-purple-50 to-purple-100 rounded-2xl p-6 mb-8">
-                    <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
-                        <i class="fas fa-briefcase text-purple-600 mr-3"></i>
-                        Pengaturan Perkara
-                    </h3>
-                    <div class="space-y-6">
-                        <div>
-                            <label class="block text-sm font-bold text-gray-700 mb-2">
-                                Maksimal Perkara per Hari
-                            </label>
-                            <input type="number" name="perkara_max_perday" min="1" max="20" 
-                                   value="<?= get_setting('perkara_max_perday', 5) ?>" 
-                                   class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
-                        </div>
-                    </div>
+                <div class="mt-8 pt-6 border-t border-gray-100">
+                    <button type="submit" name="update_settings" class="bg-blue-600 text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 hover:shadow-lg transition-all flex items-center">
+                        <i class="fas fa-save mr-2"></i> Simpan Tampilan
+                    </button>
                 </div>
-
-                <!-- SERTIFIKAT DINAMIS -->
-                <div class="bg-gradient-to-r from-orange-50 to-orange-100 rounded-2xl p-6 mb-8">
-                    <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
-                        <i class="fas fa-certificate text-orange-600 mr-3"></i>
-                        Pengaturan Sertifikat
-                    </h3>
-                    <div class="space-y-6">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label class="block text-sm font-bold text-gray-700 mb-2">
-                                    Minimal Kehadiran (%)
-                                </label>
-                                <input type="number" name="sertifikat_min_hadir" min="0" max="100" 
-                                       value="<?= get_setting('sertifikat_min_hadir', 80) ?>" 
-                                       class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
-                                <p class="text-sm text-gray-600 mt-2">
-                                    Minimal persentase kehadiran untuk sertifikat
-                                </p>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-bold text-gray-700 mb-2">
-                                    Minimal Score Total
-                                </label>
-                                <input type="number" name="sertifikat_min_score" min="0" max="100" 
-                                       value="<?= get_setting('sertifikat_min_score', 75) ?>" 
-                                       class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
-                                <p class="text-sm text-gray-600 mt-2">
-                                    Minimal score total untuk generate sertifikat
-                                </p>
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <label class="block text-sm font-bold text-gray-700 mb-2">
-                                    Bobot Kehadiran (%)
-                                </label>
-                                <input type="number" name="sertifikat_bobot_hadir" min="0" max="100" 
-                                       value="<?= get_setting('sertifikat_bobot_hadir', 60) ?>" 
-                                       class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-bold text-gray-700 mb-2">
-                                    Bobot Laporan (%)
-                                </label>
-                                <input type="number" name="sertifikat_bobot_laporan" min="0" max="100" 
-                                       value="<?= get_setting('sertifikat_bobot_laporan', 40) ?>" 
-                                       class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
-                            </div>
-                        </div>
-                        <div class="p-4 bg-white rounded-xl border-2 border-orange-200">
-                            <h4 class="font-bold text-gray-900 mb-2">Formula Perhitungan:</h4>
-                            <p class="text-sm text-gray-700">
-                                <strong>Total Score</strong> = (Persentase Hadir × Bobot Hadir / 100) + (Rata-rata Laporan × Bobot Laporan / 10)
-                            </p>
-                            <p class="text-sm text-gray-600 mt-2">
-                                <i class="fas fa-lightbulb mr-1"></i>
-                                Sertifikat akan tersedia jika Total Score ≥ Minimal Score dan Persentase Hadir ≥ Minimal Kehadiran
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <button type="submit" name="update_settings" 
-                        class="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white px-8 py-4 rounded-xl font-bold hover:shadow-lg transition-all">
-                    <i class="fas fa-save mr-2"></i>Simpan Semua Perubahan
-                </button>
             </form>
         </div>
 
@@ -360,24 +303,18 @@ $active_tab = $_GET['tab'] ?? 'institusi';
 
 <script>
 function showTab(tabName) {
+    // Hide all tabs
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+    
+    // Reset buttons
     document.querySelectorAll('.tab-btn').forEach(el => {
-        el.classList.remove('border-b-4', 'border-blue-600', 'text-blue-600');
+        el.classList.remove('!border-blue-600', '!text-blue-600', 'bg-white');
     });
     
+    // Show active
     document.getElementById('content-' + tabName).classList.remove('hidden');
-    document.getElementById('tab-' + tabName).classList.add('border-b-4', 'border-blue-600', 'text-blue-600');
+    document.getElementById('tab-' + tabName).classList.add('!border-blue-600', '!text-blue-600', 'bg-white');
 }
-
-<?php if(isset($_GET['msg'])): ?>
-Swal.fire({
-    icon: 'success',
-    title: 'Berhasil!',
-    text: 'Settings telah diupdate',
-    timer: 2000,
-    showConfirmButton: false
-});
-<?php endif; ?>
 </script>
 
 <?php require_once '../includes/sidebar.php'; ?>

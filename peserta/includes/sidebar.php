@@ -1,108 +1,105 @@
 <?php
 // =============================================
-// PESERTA SIDEBAR - LEFT MENU
-// C:\laragon\www\ptun-website\peserta\includes\sidebar.php
+// PESERTA SIDEBAR - RESPONSIVE TOGGLE
 // =============================================
 
-$current_page = basename($_SERVER['PHP_SELF'], '.php');
 $current_dir = basename(dirname($_SERVER['PHP_SELF']));
-
-$base_url = (isset($base_url)) ? $base_url : '../';
-
-// Get stats
 $peserta_id = $_SESSION['user_id'];
+
+// Get Stats
 $stats = get_absensi_stats($peserta_id);
 $percentage = absensi_percentage($peserta_id);
 ?>
 
-<!-- SIDEBAR -->
-<aside class="w-64 bg-white shadow-xl min-h-screen fixed left-0 top-16 bottom-0 overflow-y-auto">
+<div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-30 hidden md:hidden transition-opacity"></div>
+
+<aside id="main-sidebar" class="w-64 bg-white shadow-2xl h-[calc(100vh-4rem)] fixed left-0 top-16 overflow-y-auto fixed-sidebar border-r border-gray-200 transform -translate-x-full md:translate-x-0 sidebar-transition">
     <div class="p-6">
-        <h3 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">Menu Peserta</h3>
+        <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 px-4">Menu Peserta</h3>
         
-        <nav class="space-y-2">
-            <!-- Dashboard -->
-            <a href="<?= $base_url ?>index.php" 
-               class="flex items-center space-x-3 px-4 py-3 rounded-xl transition-all <?= $current_dir == 'peserta' && $current_page == 'index' ? 'bg-green-500 text-white' : 'text-gray-700 hover:bg-green-50' ?>">
-                <i class="fas fa-home text-lg"></i>
+        <nav class="space-y-1">
+            <a href="<?= BASE_URL ?>/peserta/" 
+               class="flex items-center space-x-3 px-4 py-3 rounded-xl transition-all group <?= $current_dir == 'peserta' ? 'bg-green-600 text-white shadow-lg shadow-green-200' : 'text-gray-600 hover:bg-green-50 hover:text-green-600' ?>">
+                <i class="fas fa-home w-6 text-center"></i>
                 <span class="font-semibold">Dashboard</span>
             </a>
 
-            <!-- Absensi -->
-            <a href="<?= $base_url ?>absensi/" 
-               class="flex items-center space-x-3 px-4 py-3 rounded-xl transition-all <?= $current_dir == 'absensi' ? 'bg-blue-500 text-white' : 'text-gray-700 hover:bg-blue-50' ?>">
-                <i class="fas fa-calendar-check text-lg"></i>
+            <a href="<?= BASE_URL ?>/peserta/absensi/" 
+               class="flex items-center space-x-3 px-4 py-3 rounded-xl transition-all group <?= $current_dir == 'absensi' ? 'bg-green-600 text-white shadow-lg shadow-green-200' : 'text-gray-600 hover:bg-green-50 hover:text-green-600' ?>">
+                <i class="fas fa-calendar-check w-6 text-center"></i>
                 <span class="font-semibold">Absensi</span>
             </a>
 
-            <!-- Perkara -->
-            <a href="<?= $base_url ?>perkara/" 
-               class="flex items-center space-x-3 px-4 py-3 rounded-xl transition-all <?= $current_dir == 'perkara' ? 'bg-purple-500 text-white' : 'text-gray-700 hover:bg-purple-50' ?>">
-                <i class="fas fa-briefcase text-lg"></i>
-                <span class="font-semibold">Perkara</span>
+            <a href="<?= BASE_URL ?>/peserta/aktivitas/" 
+               class="flex items-center space-x-3 px-4 py-3 rounded-xl transition-all group <?= $current_dir == 'aktivitas' ? 'bg-green-600 text-white shadow-lg shadow-green-200' : 'text-gray-600 hover:bg-green-50 hover:text-green-600' ?>">
+                <i class="fas fa-tasks w-6 text-center"></i>
+                <span class="font-semibold">Aktivitas</span>
             </a>
 
-            <!-- Laporan -->
-            <a href="<?= $base_url ?>laporan/" 
-               class="flex items-center space-x-3 px-4 py-3 rounded-xl transition-all <?= $current_dir == 'laporan' ? 'bg-pink-500 text-white' : 'text-gray-700 hover:bg-pink-50' ?>">
-                <i class="fas fa-chart-line text-lg"></i>
+            <a href="<?= BASE_URL ?>/peserta/laporan/" 
+               class="flex items-center space-x-3 px-4 py-3 rounded-xl transition-all group <?= $current_dir == 'laporan' ? 'bg-green-600 text-white shadow-lg shadow-green-200' : 'text-gray-600 hover:bg-green-50 hover:text-green-600' ?>">
+                <i class="fas fa-chart-line w-6 text-center"></i>
                 <span class="font-semibold">Laporan</span>
             </a>
 
-            <!-- Sertifikat -->
-            <a href="<?= $base_url ?>sertifikat/" 
-               class="flex items-center space-x-3 px-4 py-3 rounded-xl transition-all <?= $current_dir == 'sertifikat' ? 'bg-orange-500 text-white' : 'text-gray-700 hover:bg-orange-50' ?>">
-                <i class="fas fa-certificate text-lg"></i>
+            <a href="<?= BASE_URL ?>/peserta/sertifikat/" 
+               class="flex items-center space-x-3 px-4 py-3 rounded-xl transition-all group <?= $current_dir == 'sertifikat' ? 'bg-green-600 text-white shadow-lg shadow-green-200' : 'text-gray-600 hover:bg-green-50 hover:text-green-600' ?>">
+                <i class="fas fa-certificate w-6 text-center"></i>
                 <span class="font-semibold">Sertifikat</span>
             </a>
 
-            <hr class="my-4">
+            <div class="my-4 border-t border-gray-100 mx-4"></div>
 
-            <!-- Profile -->
-            <a href="<?= $base_url ?>profile/" 
-               class="flex items-center space-x-3 px-4 py-3 rounded-xl transition-all <?= $current_dir == 'profile' ? 'bg-green-500 text-white' : 'text-gray-700 hover:bg-green-50' ?>">
-                <i class="fas fa-user-circle text-lg"></i>
+            <a href="<?= BASE_URL ?>/peserta/profile/" 
+               class="flex items-center space-x-3 px-4 py-3 rounded-xl transition-all group <?= $current_dir == 'profile' ? 'bg-green-600 text-white shadow-lg shadow-green-200' : 'text-gray-600 hover:bg-green-50 hover:text-green-600' ?>">
+                <i class="fas fa-user-circle w-6 text-center"></i>
                 <span class="font-semibold">Profile</span>
             </a>
 
-            <!-- Logout -->
-            <a href="<?= $base_url ?>../login/logout.php" 
-               class="flex items-center space-x-3 px-4 py-3 rounded-xl text-red-600 hover:bg-red-50 transition-all">
-                <i class="fas fa-sign-out-alt text-lg"></i>
+            <a href="<?= BASE_URL ?>/login/logout.php" 
+               class="flex items-center space-x-3 px-4 py-3 rounded-xl text-red-600 hover:bg-red-50 hover:text-red-700 transition-all mt-2 group">
+                <i class="fas fa-sign-out-alt w-6 text-center group-hover:rotate-180 transition-transform duration-300"></i>
                 <span class="font-semibold">Logout</span>
             </a>
         </nav>
 
-        <!-- Stats Card -->
-        <div class="mt-8 p-4 bg-gradient-to-br from-green-50 to-emerald-100 rounded-xl">
-            <p class="text-xs text-gray-600 font-semibold mb-3">Statistik Absensi</p>
+        <div class="mt-8 p-4 bg-gradient-to-br from-green-50 to-emerald-100 rounded-xl border border-green-100">
+            <p class="text-[10px] text-green-800 font-bold mb-3 uppercase">Kehadiran</p>
             <div class="space-y-3">
                 <div>
                     <div class="flex justify-between text-xs mb-1">
-                        <span class="text-gray-600">Kehadiran</span>
-                        <span class="font-bold text-green-600"><?= $stats['hadir'] ?>/<?= absensi_max_hari() ?></span>
+                        <span class="text-gray-600">Total</span>
+                        <span class="font-bold text-green-700"><?= $stats['hadir'] ?>/<?= absensi_max_hari() ?></span>
                     </div>
                     <div class="w-full bg-gray-200 rounded-full h-2">
-                        <div class="bg-green-600 rounded-full h-2" style="width: <?= $percentage ?>%"></div>
+                        <div class="bg-green-600 rounded-full h-2 transition-all duration-1000" style="width: <?= $percentage ?>%"></div>
                     </div>
                 </div>
                 <div class="text-center pt-2 border-t border-green-200">
                     <span class="text-2xl font-bold text-green-600"><?= $percentage ?>%</span>
-                    <p class="text-xs text-gray-600">Persentase Hadir</p>
                 </div>
             </div>
         </div>
     </div>
 </aside>
 
-<!-- MAIN CONTENT WRAPPER -->
-<div class="ml-64 pt-16">
-    <!-- Content will be placed here by each page -->
-</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const btn = document.getElementById('mobile-menu-btn');
+    const sidebar = document.getElementById('main-sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    
+    // Toggle
+    btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        sidebar.classList.toggle('-translate-x-full');
+        overlay.classList.toggle('hidden');
+    });
 
-<style>
-/* Adjust body to account for sidebar */
-body {
-    padding-left: 16rem; /* 64 = w-64 */
-}
-</style>
+    // Close on overlay click
+    overlay.addEventListener('click', function() {
+        sidebar.classList.add('-translate-x-full');
+        overlay.classList.add('hidden');
+    });
+});
+</script>
