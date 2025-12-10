@@ -2,6 +2,7 @@
 // =============================================
 // CONFIG/DATABASE.PHP - PTUN WEBSITE
 // PDO Connection + Helper Functions
+// FIXED: No double session_start()
 // =============================================
 
 class Database {
@@ -42,10 +43,14 @@ function db() {
 
 // SETTINGS DINAMIS (15+ Parameter)
 function get_setting($key, $default = '') {
-    $stmt = db()->prepare("SELECT `value` FROM settings WHERE `key` = ? LIMIT 1");
-    $stmt->execute([$key]);
-    $result = $stmt->fetch();
-    return $result ? $result['value'] : $default;
+    try {
+        $stmt = db()->prepare("SELECT `value` FROM settings WHERE `key` = ? LIMIT 1");
+        $stmt->execute([$key]);
+        $result = $stmt->fetch();
+        return $result ? $result['value'] : $default;
+    } catch(Exception $e) {
+        return $default;
+    }
 }
 
 // GET SITE INFO (Untuk header/footer)
@@ -67,7 +72,7 @@ function get_menu_items() {
     
     foreach($menu_keys as $key) {
         $menu_str = get_setting($key, '');
-        if($menu_str) {
+        if($menu_str && strpos($menu_str, '|') !== false) {
             list($title, $url) = explode('|', $menu_str, 2);
             $menus[] = ['title' => trim($title), 'url' => trim($url)];
         }
@@ -88,7 +93,10 @@ function current_user() {
 }
 
 function protect_page($role = null) {
-    session_start();
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    
     if(!is_logged_in()) {
         header('Location: ../login/');
         exit;
@@ -104,43 +112,143 @@ function protect_page($role = null) {
     return $user;
 }
 
-// GET ABSENSI STATISTICS (Peserta)
-function get_absensi_stats($peserta_id, $bulan = null, $tahun = null) {
-    $where = "peserta_id = ?";
-    $params = [$peserta_id];
+// =============================================
+// ABSENSI DINAMIS FUNCTIONS
+// =============================================
+
+// Get max hari kerja dari settings
+function absensi_max_hari() {
+    return (int)get_setting('absensi_max_hari', 22);
+}
+
+// Get absensi statistics untuk peserta
+function get_absensi_stats($peserta_id) {
+    $stmt = db()->prepare("
+        SELECT 
+            COUNT(*) as total,
+            SUM(CASE WHEN status='hadir' AND approved=1 THEN 1 ELSE 0 END) as hadir,
+            SUM(CASE WHEN status='alfa' THEN 1 ELSE 0 END) as alfa,
+            SUM(CASE WHEN status='izin' THEN 1 ELSE 0 END) as izin
+        FROM absensi 
+        WHERE peserta_id = ?
+    ");
+    $stmt->execute([$peserta_id]);
+    $result = $stmt->fetch();
     
-    if($bulan && $tahun) {
-        $where .= " AND MONTH(tanggal) = ? AND YEAR(tanggal) = ?";
-        $params[] = $bulan;
-        $params[] = $tahun;
-    }
+    return [
+        'total' => $result['total'] ?? 0,
+        'hadir' => $result['hadir'] ?? 0,
+        'alfa' => $result['alfa'] ?? 0,
+        'izin' => $result['izin'] ?? 0
+    ];
+}
+
+// Alias untuk backward compatibility
+function absensi_stats($peserta_id) {
+    return get_absensi_stats($peserta_id);
+}
+
+// Calculate percentage kehadiran
+function absensi_percentage($peserta_id) {
+    $stats = get_absensi_stats($peserta_id);
+    $max_hari = absensi_max_hari();
     
-    $stmt = db()->prepare("SELECT status, COUNT(*) as total FROM absensi WHERE $where GROUP BY status");
-    $stmt->execute($params);
+    if($max_hari == 0) return 0;
     
-    $stats = ['hadir' => 0, 'alfa' => 0, 'izin' => 0];
-    while($row = $stmt->fetch()) {
-        $stats[$row['status']] = $row['total'];
-    }
-    return $stats;
+    $persen = ($stats['hadir'] / $max_hari) * 100;
+    return round($persen, 1);
+}
+
+// =============================================
+// SERTIFIKAT DINAMIS FUNCTIONS
+// =============================================
+
+// Get min hadir % untuk sertifikat
+function sertifikat_min_hadir() {
+    return (int)get_setting('sertifikat_min_hadir', 80);
+}
+
+// Get min score untuk sertifikat
+function sertifikat_min_score() {
+    return (int)get_setting('sertifikat_min_score', 75);
+}
+
+// Get bobot kehadiran
+function sertifikat_bobot_hadir() {
+    return (int)get_setting('sertifikat_bobot_hadir', 60);
+}
+
+// Get bobot laporan
+function sertifikat_bobot_laporan() {
+    return (int)get_setting('sertifikat_bobot_laporan', 40);
+}
+
+// Calculate sertifikat score
+function calculate_sertifikat_score($peserta_id) {
+    // Hitung persentase kehadiran
+    $stats = get_absensi_stats($peserta_id);
+    $max_hadir = absensi_max_hari();
+    $persen_hadir = $max_hadir > 0 ? ($stats['hadir'] / $max_hadir) * 100 : 0;
+    
+    // Hitung rata-rata penilaian laporan
+    $stmt = db()->prepare("
+        SELECT AVG(lp.penilaian) as avg_penilaian 
+        FROM laporan_harian lh
+        LEFT JOIN laporan_penilaian lp ON lh.id = lp.laporan_id
+        WHERE lh.peserta_id = ? AND lh.approved = 1
+    ");
+    $stmt->execute([$peserta_id]);
+    $result = $stmt->fetch();
+    $avg_laporan = $result['avg_penilaian'] ?? 0;
+    
+    // Hitung score final
+    $bobot_hadir = sertifikat_bobot_hadir();
+    $bobot_laporan = sertifikat_bobot_laporan();
+    
+    $score_hadir = ($persen_hadir * $bobot_hadir) / 100;
+    $score_laporan = ($avg_laporan * $bobot_laporan) / 10; // Asumsi penilaian max 10
+    
+    return round($score_hadir + $score_laporan, 1);
+}
+
+// Check apakah peserta bisa generate sertifikat
+function can_generate_sertifikat($peserta_id) {
+    $score = calculate_sertifikat_score($peserta_id);
+    $min_score = sertifikat_min_score();
+    $min_hadir = sertifikat_min_hadir();
+    
+    $persen_hadir = absensi_percentage($peserta_id);
+    
+    return ($score >= $min_score && $persen_hadir >= $min_hadir);
 }
 
 // NOTIFICATION COUNT
 function get_notification_count($user_id) {
-    $stmt = db()->prepare("SELECT COUNT(*) as unread FROM notifications WHERE to_user_id = ? AND dibaca = 0");
-    $stmt->execute([$user_id]);
-    return $stmt->fetch()['unread'];
+    try {
+        $stmt = db()->prepare("SELECT COUNT(*) as unread FROM notifications WHERE to_user_id = ? AND dibaca = 0");
+        $stmt->execute([$user_id]);
+        return $stmt->fetch()['unread'] ?? 0;
+    } catch(Exception $e) {
+        return 0;
+    }
 }
 
 // FORMAT TANGGAL INDONESIA
 function format_tanggal_id($tanggal) {
+    if(!$tanggal || $tanggal == '0000-00-00' || $tanggal == '0000-00-00 00:00:00') return '-';
+    
     $bulan = [
         1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April',
         5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus',
         9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember'
     ];
-    $date = new DateTime($tanggal);
-    return $date->format('d') . ' ' . $bulan[$date->format('n')] . ' ' . $date->format('Y');
+    
+    try {
+        $date = new DateTime($tanggal);
+        return $date->format('d') . ' ' . $bulan[$date->format('n')] . ' ' . $date->format('Y');
+    } catch(Exception $e) {
+        return $tanggal;
+    }
 }
 
 // DEBUG HELPER
@@ -157,16 +265,14 @@ function dd($data) {
 function ensure_settings_table() {
     try {
         $stmt = db()->query("SELECT COUNT(*) as count FROM settings");
-        if($stmt->fetch()['count'] == 0) {
-            echo "<div class='alert alert-info'>Settings table kosong. Data default dimuat...</div>";
-            // Insert default settings jika kosong (tidak duplicate dengan SQL dump)
-        }
     } catch(Exception $e) {
         // Settings table akan diisi dari SQL dump
     }
 }
 
-// INIT
-session_start();
+// INIT - Start session only if not already started
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 ensure_settings_table();
 ?>

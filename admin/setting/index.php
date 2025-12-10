@@ -1,15 +1,15 @@
 <?php
 // =============================================
-// ADMIN SETTINGS - PTUN WEBSITE
+// ADMIN SETTINGS - PTUN WEBSITE (UPDATED)
 // C:\laragon\www\ptun-website\admin\setting\index.php
+// WITH DYNAMIC ABSENSI & SERTIFIKAT SETTINGS
 // =============================================
 
 require_once '../../config/database.php';
 session_start();
 
-// Protect admin page
 if(!isset($_SESSION['user_id']) || $_SESSION['role'] != 'admin') {
-    header('Location: ../../index.php');
+    header('Location: ../../login/');
     exit;
 }
 
@@ -50,7 +50,6 @@ $all_settings = $stmt->fetchAll(PDO::FETCH_GROUP);
 
 $active_tab = $_GET['tab'] ?? 'institusi';
 ?>
-
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -63,7 +62,8 @@ $active_tab = $_GET['tab'] ?? 'institusi';
 </head>
 <body class="bg-gray-50">
 
-<!-- NAVBAR -->
+<?php require_once '../includes/header.php'; ?>
+
 <nav class="bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg sticky top-0 z-50">
     <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
         <div class="flex items-center space-x-4">
@@ -78,7 +78,6 @@ $active_tab = $_GET['tab'] ?? 'institusi';
     </div>
 </nav>
 
-<!-- MAIN CONTENT -->
 <div class="max-w-7xl mx-auto px-6 py-8">
 
     <?php if(isset($_GET['msg'])): ?>
@@ -218,28 +217,140 @@ $active_tab = $_GET['tab'] ?? 'institusi';
             </form>
         </div>
 
-        <!-- TAB CONTENT: SISTEM -->
+        <!-- TAB CONTENT: SISTEM (UPDATED WITH DYNAMIC SETTINGS) -->
         <div id="content-sistem" class="tab-content p-8 <?= $active_tab!='sistem' ? 'hidden' : '' ?>">
             <h2 class="text-2xl font-bold text-gray-900 mb-6">Pengaturan Sistem</h2>
             <form method="POST">
                 <input type="hidden" name="group" value="sistem">
-                <div class="space-y-6">
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Maintenance Mode</label>
-                        <select name="maintenance_mode" class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
-                            <option value="0" <?= get_setting('maintenance_mode')=='0' ? 'selected' : '' ?>>Non-Aktif</option>
-                            <option value="1" <?= get_setting('maintenance_mode')=='1' ? 'selected' : '' ?>>Aktif</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Tanggal Mulai Absensi</label>
-                        <input type="date" name="absensi_start_date" value="<?= get_setting('absensi_start_date') ?>" 
-                               class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
+                
+                <!-- GENERAL SISTEM -->
+                <div class="bg-gradient-to-r from-blue-50 to-blue-100 rounded-2xl p-6 mb-8">
+                    <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+                        <i class="fas fa-cogs text-blue-600 mr-3"></i>
+                        Pengaturan Umum
+                    </h3>
+                    <div class="space-y-6">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">Maintenance Mode</label>
+                            <select name="maintenance_mode" class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
+                                <option value="0" <?= get_setting('maintenance_mode')=='0' ? 'selected' : '' ?>>Non-Aktif</option>
+                                <option value="1" <?= get_setting('maintenance_mode')=='1' ? 'selected' : '' ?>>Aktif</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
+
+                <!-- ABSENSI DINAMIS -->
+                <div class="bg-gradient-to-r from-green-50 to-emerald-100 rounded-2xl p-6 mb-8">
+                    <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+                        <i class="fas fa-calendar-check text-green-600 mr-3"></i>
+                        Pengaturan Absensi
+                    </h3>
+                    <div class="space-y-6">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">Tanggal Mulai Absensi</label>
+                            <input type="date" name="absensi_start_date" value="<?= get_setting('absensi_start_date') ?>" 
+                                   class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">
+                                Maksimal Hari Kerja
+                                <span class="text-gray-500 font-normal">(untuk kalkulasi persentase kehadiran)</span>
+                            </label>
+                            <input type="number" name="absensi_max_hari" min="1" max="31" 
+                                   value="<?= get_setting('absensi_max_hari', 22) ?>" 
+                                   class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
+                            <p class="text-sm text-gray-600 mt-2">
+                                <i class="fas fa-info-circle mr-1"></i>
+                                Saat ini: <strong><?= get_setting('absensi_max_hari', 22) ?> hari</strong>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PERKARA SETTINGS -->
+                <div class="bg-gradient-to-r from-purple-50 to-purple-100 rounded-2xl p-6 mb-8">
+                    <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+                        <i class="fas fa-briefcase text-purple-600 mr-3"></i>
+                        Pengaturan Perkara
+                    </h3>
+                    <div class="space-y-6">
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-2">
+                                Maksimal Perkara per Hari
+                            </label>
+                            <input type="number" name="perkara_max_perday" min="1" max="20" 
+                                   value="<?= get_setting('perkara_max_perday', 5) ?>" 
+                                   class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SERTIFIKAT DINAMIS -->
+                <div class="bg-gradient-to-r from-orange-50 to-orange-100 rounded-2xl p-6 mb-8">
+                    <h3 class="text-xl font-bold text-gray-900 mb-4 flex items-center">
+                        <i class="fas fa-certificate text-orange-600 mr-3"></i>
+                        Pengaturan Sertifikat
+                    </h3>
+                    <div class="space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">
+                                    Minimal Kehadiran (%)
+                                </label>
+                                <input type="number" name="sertifikat_min_hadir" min="0" max="100" 
+                                       value="<?= get_setting('sertifikat_min_hadir', 80) ?>" 
+                                       class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
+                                <p class="text-sm text-gray-600 mt-2">
+                                    Minimal persentase kehadiran untuk sertifikat
+                                </p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">
+                                    Minimal Score Total
+                                </label>
+                                <input type="number" name="sertifikat_min_score" min="0" max="100" 
+                                       value="<?= get_setting('sertifikat_min_score', 75) ?>" 
+                                       class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
+                                <p class="text-sm text-gray-600 mt-2">
+                                    Minimal score total untuk generate sertifikat
+                                </p>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">
+                                    Bobot Kehadiran (%)
+                                </label>
+                                <input type="number" name="sertifikat_bobot_hadir" min="0" max="100" 
+                                       value="<?= get_setting('sertifikat_bobot_hadir', 60) ?>" 
+                                       class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-bold text-gray-700 mb-2">
+                                    Bobot Laporan (%)
+                                </label>
+                                <input type="number" name="sertifikat_bobot_laporan" min="0" max="100" 
+                                       value="<?= get_setting('sertifikat_bobot_laporan', 40) ?>" 
+                                       class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500">
+                            </div>
+                        </div>
+                        <div class="p-4 bg-white rounded-xl border-2 border-orange-200">
+                            <h4 class="font-bold text-gray-900 mb-2">Formula Perhitungan:</h4>
+                            <p class="text-sm text-gray-700">
+                                <strong>Total Score</strong> = (Persentase Hadir × Bobot Hadir / 100) + (Rata-rata Laporan × Bobot Laporan / 10)
+                            </p>
+                            <p class="text-sm text-gray-600 mt-2">
+                                <i class="fas fa-lightbulb mr-1"></i>
+                                Sertifikat akan tersedia jika Total Score ≥ Minimal Score dan Persentase Hadir ≥ Minimal Kehadiran
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
                 <button type="submit" name="update_settings" 
-                        class="mt-8 bg-gradient-to-r from-blue-500 to-blue-600 text-white px-8 py-4 rounded-xl font-bold hover:shadow-lg transition-all">
-                    <i class="fas fa-save mr-2"></i>Simpan Perubahan
+                        class="w-full bg-gradient-to-r from-blue-500 to-blue-600 text-white px-8 py-4 rounded-xl font-bold hover:shadow-lg transition-all">
+                    <i class="fas fa-save mr-2"></i>Simpan Semua Perubahan
                 </button>
             </form>
         </div>
@@ -249,18 +360,15 @@ $active_tab = $_GET['tab'] ?? 'institusi';
 
 <script>
 function showTab(tabName) {
-    // Hide all tabs
     document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
     document.querySelectorAll('.tab-btn').forEach(el => {
         el.classList.remove('border-b-4', 'border-blue-600', 'text-blue-600');
     });
     
-    // Show selected tab
     document.getElementById('content-' + tabName).classList.remove('hidden');
     document.getElementById('tab-' + tabName).classList.add('border-b-4', 'border-blue-600', 'text-blue-600');
 }
 
-// Auto show success message
 <?php if(isset($_GET['msg'])): ?>
 Swal.fire({
     icon: 'success',
@@ -271,6 +379,8 @@ Swal.fire({
 });
 <?php endif; ?>
 </script>
+
+<?php require_once '../includes/sidebar.php'; ?>
 
 </body>
 </html>
