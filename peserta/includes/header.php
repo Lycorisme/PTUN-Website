@@ -1,6 +1,6 @@
 <?php
 // =============================================
-// PESERTA HEADER - RESPONSIVE & LOGO FIX
+// PESERTA HEADER - FULL DYNAMIC
 // =============================================
 
 $site_name = get_site_name();
@@ -8,7 +8,7 @@ $user_name = $_SESSION['user_data']['nama'] ?? 'Peserta';
 $user_instansi = $_SESSION['user_data']['instansi'] ?? '';
 $user_id = $_SESSION['user_id'] ?? 0;
 
-// GET HEADER NOTIFICATIONS
+// 1. GET RECEIVED NOTIFICATIONS
 $header_notifs = [];
 $notif_count = 0;
 if($user_id) {
@@ -17,6 +17,17 @@ if($user_id) {
     $stmt->execute([$user_id]);
     $header_notifs = $stmt->fetchAll();
 }
+
+// 2. GET FAVICON & LOGO
+$favicon_url = get_setting('favicon');
+if($favicon_url && !str_starts_with($favicon_url, 'http')) {
+    $favicon_url = BASE_URL . $favicon_url;
+}
+
+$logo_url = get_logo_url();
+if($logo_url && !str_starts_with($logo_url, 'http')) {
+    $logo_url = BASE_URL . $logo_url;
+}
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -24,6 +35,10 @@ if($user_id) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= isset($page_title) ? $page_title . ' - ' : '' ?><?= htmlspecialchars($site_name) ?></title>
+    
+    <?php if($favicon_url): ?>
+        <link rel="shortcut icon" href="<?= $favicon_url ?>" type="image/x-icon">
+    <?php endif; ?>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -34,7 +49,9 @@ if($user_id) {
         .fixed-header { z-index: 50; }
         .fixed-sidebar { z-index: 40; }
         .sidebar-transition { transition: transform 0.3s ease-in-out; }
-        .notif-scroll::-webkit-scrollbar { width: 6px; }
+        
+        /* Scrollbar */
+        .notif-scroll::-webkit-scrollbar { width: 5px; }
         .notif-scroll::-webkit-scrollbar-track { background: #f1f1f1; }
         .notif-scroll::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
     </style>
@@ -51,13 +68,9 @@ if($user_id) {
                 </button>
 
                 <a href="<?= BASE_URL ?>/peserta/" class="flex items-center space-x-3 group">
-                    <div class="w-10 h-10 bg-white/90 rounded-xl flex items-center justify-center shadow-sm group-hover:bg-white transition-all">
-                        <?php 
-                        $logo = get_logo_url();
-                        $logo_path = (strpos($logo, 'http') === 0) ? $logo : BASE_URL . '/' . ltrim($logo, '/');
-                        ?>
-                        <?php if($logo): ?>
-                            <img src="<?= $logo_path ?>" class="w-8 h-8 object-contain">
+                    <div class="w-10 h-10 bg-white/90 rounded-xl flex items-center justify-center shadow-sm group-hover:bg-white transition-all overflow-hidden p-1">
+                        <?php if($logo_url): ?>
+                            <img src="<?= $logo_url ?>" class="w-full h-full object-contain">
                         <?php else: ?>
                             <i class="fas fa-user-graduate text-xl text-green-600"></i>
                         <?php endif; ?>

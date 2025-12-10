@@ -1,6 +1,6 @@
 <?php
 // =============================================
-// ADMIN SETTINGS - FULL CONFIGURATION
+// ADMIN SETTINGS - FULL CONFIGURATION WITH SIGNATURE UPLOADS
 // =============================================
 
 require_once '../../config/database.php';
@@ -15,6 +15,30 @@ if(!isset($_SESSION['user_id']) || $_SESSION['role'] != 'admin') {
 if(isset($_POST['update_settings'])) {
     $group = $_POST['group'];
     
+    // FUNCTION HELPER UPLOAD
+    function handle_upload($input_name, $folder, $setting_key, $group) {
+        if(isset($_FILES[$input_name]) && $_FILES[$input_name]['error'] == 0) {
+            $target_dir = "../../uploads/$folder/";
+            if(!is_dir($target_dir)) mkdir($target_dir, 0755, true);
+            
+            $file_ext = pathinfo($_FILES[$input_name]['name'], PATHINFO_EXTENSION);
+            $new_filename = $input_name . '_' . time() . '.' . $file_ext;
+            $target_file = $target_dir . $new_filename;
+            
+            // Hapus file lama jika ada
+            $old_file = get_setting($setting_key);
+            if($old_file && file_exists("../.." . $old_file)) {
+                @unlink("../.." . $old_file);
+            }
+
+            if(move_uploaded_file($_FILES[$input_name]['tmp_name'], $target_file)) {
+                $stmt = db()->prepare("INSERT INTO settings (`key`, `value`, `group`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE `value`=?");
+                $val = '/uploads/' . $folder . '/' . $new_filename;
+                $stmt->execute([$setting_key, $val, $group, $val]);
+            }
+        }
+    }
+
     // 1. Handle Logo Upload
     if(isset($_FILES['logo_url']) && $_FILES['logo_url']['error'] == 0) {
         $target_dir = "../../uploads/logos/";
@@ -24,7 +48,7 @@ if(isset($_POST['update_settings'])) {
         $new_filename = 'logo_' . time() . '.' . $file_ext;
         $target_file = $target_dir . $new_filename;
         
-        // Hapus logo lama jika ada (opsional, untuk kebersihan server)
+        // Hapus logo lama jika ada
         $old_logo = get_setting('logo_url');
         if($old_logo && file_exists("../.." . $old_logo)) {
             @unlink("../.." . $old_logo);
@@ -37,8 +61,17 @@ if(isset($_POST['update_settings'])) {
         }
     }
     
-    // 2. Update Text Settings
-    // List key yang diizinkan untuk update massal
+    // 2. Handle Favicon
+    handle_upload('favicon', 'logos', 'favicon', $group);
+    
+    // 3. Handle Certificate Template (Deprecated but kept for compatibility)
+    handle_upload('sertifikat_bg', 'sertifikat', 'sertifikat_bg', $group);
+
+    // 4. Handle Tanda Tangan Uploads (NEW)
+    handle_upload('ttd_img_kepala', 'sertifikat', 'ttd_img_kepala', $group);
+    handle_upload('ttd_img_pembimbing', 'sertifikat', 'ttd_img_pembimbing', $group);
+    
+    // 5. Update Text Settings
     $allowed_keys = [
         'nama_website', 'nama_panjang', 'tagline', 'alamat_lengkap', 'no_telepon', 'email_kontak',
         'kota_instansi', 'kepala_nama', 'kepala_nip', 'kepala_jabatan', 'pembimbing_nama', 'pembimbing_nip',
@@ -60,8 +93,8 @@ if(isset($_POST['update_settings'])) {
     exit;
 }
 
-$active_tab = $_GET['tab'] ?? 'institusi';
-$page_title = 'Pengaturan Sistem';
+ $active_tab = $_GET['tab'] ?? 'institusi';
+ $page_title = 'Pengaturan Sistem';
 require_once '../includes/header.php';
 ?>
 
@@ -78,7 +111,7 @@ require_once '../includes/header.php';
         <div class="flex border-b border-gray-200 overflow-x-auto bg-gray-50">
             <button onclick="showTab('institusi')" id="tab-institusi" 
                     class="tab-btn flex-1 px-6 py-4 font-bold text-gray-700 hover:bg-white hover:text-blue-600 transition-all border-b-4 border-transparent <?= $active_tab=='institusi' ? '!border-blue-600 !text-blue-600 bg-white' : '' ?>">
-                <i class="fas fa-university mr-2"></i>Institusi & Pejabat
+                <i class="fas fa-university mr-2"></i>Institusi & Tampilan
             </button>
             <button onclick="showTab('sistem')" id="tab-sistem" 
                     class="tab-btn flex-1 px-6 py-4 font-bold text-gray-700 hover:bg-white hover:text-blue-600 transition-all border-b-4 border-transparent <?= $active_tab=='sistem' ? '!border-blue-600 !text-blue-600 bg-white' : '' ?>">
@@ -114,6 +147,7 @@ require_once '../includes/header.php';
                             <label class="block text-sm font-bold text-gray-700 mb-1">Kota Instansi (Untuk Surat)</label>
                             <input type="text" name="kota_instansi" value="<?= get_setting('kota_instansi', 'Banjarmasin') ?>" class="w-full border-2 border-gray-200 rounded-xl px-4 py-2 focus:border-blue-500 focus:outline-none">
                         </div>
+                        
                         <div>
                             <label class="block text-sm font-bold text-gray-700 mb-1">Logo Instansi</label>
                             <div class="flex items-center gap-4 bg-gray-50 p-3 rounded-xl border border-gray-200">
@@ -121,6 +155,16 @@ require_once '../includes/header.php';
                                     <img src="<?= BASE_URL . get_setting('logo_url') ?>" class="h-12 w-auto object-contain">
                                 <?php endif; ?>
                                 <input type="file" name="logo_url" accept="image/*" class="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label class="block text-sm font-bold text-gray-700 mb-1">Favicon (Ikon Tab Browser)</label>
+                            <div class="flex items-center gap-4 bg-gray-50 p-3 rounded-xl border border-gray-200">
+                                <?php if(get_setting('favicon')): ?>
+                                    <img src="<?= BASE_URL . get_setting('favicon') ?>" class="h-8 w-8 object-contain">
+                                <?php endif; ?>
+                                <input type="file" name="favicon" accept="image/x-icon,image/png,image/jpeg" class="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
                             </div>
                         </div>
                     </div>
@@ -145,6 +189,16 @@ require_once '../includes/header.php';
                                         <input type="text" name="kepala_jabatan" value="<?= get_setting('kepala_jabatan', 'Kepala Instansi') ?>" class="w-full border border-blue-200 rounded-lg px-3 py-2">
                                     </div>
                                 </div>
+                                
+                                <div>
+                                    <label class="text-xs font-semibold text-gray-500 block mb-1">Scan Tanda Tangan (Format PNG/Transparan)</label>
+                                    <div class="flex items-center gap-3 bg-white p-2 rounded-lg border border-blue-200">
+                                        <?php if(get_setting('ttd_img_kepala')): ?>
+                                            <img src="<?= BASE_URL . get_setting('ttd_img_kepala') ?>" class="h-10 w-auto object-contain border rounded">
+                                        <?php endif; ?>
+                                        <input type="file" name="ttd_img_kepala" accept="image/png,image/jpeg" class="text-xs w-full">
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -158,6 +212,16 @@ require_once '../includes/header.php';
                                 <div>
                                     <label class="text-xs font-semibold text-gray-500">NIP (Opsional)</label>
                                     <input type="text" name="pembimbing_nip" value="<?= get_setting('pembimbing_nip') ?>" class="w-full border border-green-200 rounded-lg px-3 py-2">
+                                </div>
+
+                                <div>
+                                    <label class="text-xs font-semibold text-gray-500 block mb-1">Scan Tanda Tangan (Format PNG/Transparan)</label>
+                                    <div class="flex items-center gap-3 bg-white p-2 rounded-lg border border-green-200">
+                                        <?php if(get_setting('ttd_img_pembimbing')): ?>
+                                            <img src="<?= BASE_URL . get_setting('ttd_img_pembimbing') ?>" class="h-10 w-auto object-contain border rounded">
+                                        <?php endif; ?>
+                                        <input type="file" name="ttd_img_pembimbing" accept="image/png,image/jpeg" class="text-xs w-full">
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -173,7 +237,7 @@ require_once '../includes/header.php';
         </div>
 
         <div id="content-sistem" class="tab-content p-8 <?= $active_tab!='sistem' ? 'hidden' : '' ?>">
-            <form method="POST">
+            <form method="POST" enctype="multipart/form-data">
                 <input type="hidden" name="group" value="sistem">
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">

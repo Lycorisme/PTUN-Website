@@ -1,13 +1,14 @@
 <?php
 // =============================================
-// ADMIN HEADER - SENT NOTIFICATIONS MONITOR
+// ADMIN HEADER - FULL DYNAMIC
 // =============================================
 
+// Pastikan fungsi get_setting tersedia
 $site_name = get_site_name();
 $user_name = $_SESSION['user_data']['nama'] ?? 'Admin';
 
-// GET LATEST SENT NOTIFICATIONS (Riwayat Pengiriman)
-// Mengambil pesan yang dikirim ke user lain (bukan ke diri sendiri jika ada)
+// 1. LOGIKA NOTIFIKASI (MONITORING PESAN KELUAR)
+// Menampilkan pesan terakhir yang dikirim admin ke peserta
 $stmt = db()->query("
     SELECT n.*, u.nama as penerima 
     FROM notifications n 
@@ -17,9 +18,20 @@ $stmt = db()->query("
 ");
 $sent_notifs = $stmt->fetchAll();
 
-// Count pesan hari ini untuk badge (opsional, agar terlihat aktif)
+// Hitung pesan hari ini (untuk badge indikator aktivitas)
 $stmt = db()->query("SELECT COUNT(*) as total FROM notifications WHERE DATE(created_at) = CURDATE()");
 $today_count = $stmt->fetch()['total'];
+
+// 2. GET FAVICON & LOGO
+$favicon_url = get_setting('favicon');
+if($favicon_url && !str_starts_with($favicon_url, 'http')) {
+    $favicon_url = BASE_URL . $favicon_url;
+}
+
+$logo_url = get_logo_url();
+if($logo_url && !str_starts_with($logo_url, 'http')) {
+    $logo_url = BASE_URL . $logo_url;
+}
 ?>
 <!DOCTYPE html>
 <html lang="id">
@@ -28,6 +40,10 @@ $today_count = $stmt->fetch()['total'];
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= isset($page_title) ? $page_title . ' - ' : '' ?><?= htmlspecialchars($site_name) ?></title>
     
+    <?php if($favicon_url): ?>
+        <link rel="shortcut icon" href="<?= $favicon_url ?>" type="image/x-icon">
+    <?php endif; ?>
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -38,10 +54,10 @@ $today_count = $stmt->fetch()['total'];
         .fixed-sidebar { z-index: 40; }
         .sidebar-transition { transition: transform 0.3s ease-in-out; }
         
-        /* Scrollbar untuk dropdown notifikasi */
-        .notif-scroll::-webkit-scrollbar { width: 6px; }
+        /* Scrollbar Halus */
+        .notif-scroll::-webkit-scrollbar { width: 5px; }
         .notif-scroll::-webkit-scrollbar-track { background: #f1f1f1; }
-        .notif-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .notif-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .notif-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
@@ -57,13 +73,9 @@ $today_count = $stmt->fetch()['total'];
                 </button>
 
                 <a href="<?= BASE_URL ?>/admin/" class="flex items-center space-x-3 group">
-                    <div class="w-10 h-10 bg-white/90 rounded-xl flex items-center justify-center shadow-sm group-hover:bg-white transition-all">
-                        <?php 
-                        $logo = get_logo_url();
-                        $logo_path = (strpos($logo, 'http') === 0) ? $logo : BASE_URL . '/' . ltrim($logo, '/');
-                        ?>
-                        <?php if($logo): ?>
-                            <img src="<?= $logo_path ?>" class="w-8 h-8 object-contain">
+                    <div class="w-10 h-10 bg-white/90 rounded-xl flex items-center justify-center shadow-sm group-hover:bg-white transition-all overflow-hidden p-1">
+                        <?php if($logo_url): ?>
+                            <img src="<?= $logo_url ?>" class="w-full h-full object-contain">
                         <?php else: ?>
                             <i class="fas fa-user-shield text-xl text-blue-600"></i>
                         <?php endif; ?>
@@ -81,15 +93,15 @@ $today_count = $stmt->fetch()['total'];
                     <button class="relative p-2 hover:bg-white/10 rounded-lg transition-all focus:outline-none">
                         <i class="fas fa-bell text-xl"></i>
                         <?php if($today_count > 0): ?>
-                        <span class="absolute top-1 right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-white">
+                        <span class="absolute top-1 right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-white animate-pulse">
                             <?= $today_count > 9 ? '9+' : $today_count ?>
                         </span>
                         <?php endif; ?>
                     </button>
 
-                    <div class="hidden group-hover:block absolute right-0 mt-0 w-80 sm:w-96 bg-white rounded-xl shadow-2xl py-2 text-gray-800 border border-gray-100 z-50 origin-top-right animate-fade-in-down">
+                    <div class="hidden group-hover:block absolute right-0 mt-0 w-80 sm:w-96 bg-white rounded-xl shadow-2xl py-2 text-gray-800 border border-gray-100 z-50 origin-top-right">
                         <div class="px-4 py-3 border-b border-gray-100 flex justify-between items-center bg-gray-50 rounded-t-xl">
-                            <h3 class="font-bold text-gray-700 text-sm">Riwayat Pengiriman Pesan</h3>
+                            <h3 class="font-bold text-gray-700 text-sm">Pesan Terkirim Terbaru</h3>
                             <a href="<?= BASE_URL ?>/admin/notifikasi/" class="text-xs text-blue-600 hover:text-blue-800 font-semibold">Lihat Semua</a>
                         </div>
                         
