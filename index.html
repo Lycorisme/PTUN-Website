@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PTUN Banjarmasin - Pengadilan Tata Usaha Negara</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'sans': ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: {
+                            50: '#eff6ff',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            900: '#1e3a8a'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .gradient-bg { background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%); }
+        .glass { backdrop-filter: blur(10px); background: rgba(255,255,255,0.1); }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans antialiased">
+    
+    <!-- NAVBAR -->
+    <nav class="bg-white/80 backdrop-blur-md shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-4">
+                    <div class="w-10 h-10 bg-gradient-to-r from-primary-600 to-primary-700 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-balance-scale text-white text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-gray-900">PTUN Banjarmasin</h1>
+                        <p class="text-xs text-gray-600 font-medium">Pengadilan Tata Usaha Negara</p>
+                    </div>
+                </div>
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="#" class="text-gray-700 hover:text-primary-600 font-medium px-3 py-2 transition-all">Beranda</a>
+                    <a href="#" class="text-gray-700 hover:text-primary-600 font-medium px-3 py-2 transition-all">Tentang</a>
+                    <a href="#" class="text-gray-700 hover:text-primary-600 font-medium px-3 py-2 transition-all">Layanan</a>
+                    <a href="#" class="text-gray-700 hover:text-primary-600 font-medium px-3 py-2 transition-all">SIM PTUN</a>
+                    <a href="#" class="bg-primary-600 text-white px-6 py-2 rounded-xl font-semibold hover:bg-primary-700 transition-all shadow-lg">
+                        <i class="fas fa-sign-in-alt mr-2"></i>Login
+                    </a>
+                </div>
+                <div class="md:hidden">
+                    <button class="text-gray-700 hover:text-primary-600">
+                        <i class="fas fa-bars text-xl"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- HERO SECTION -->
+    <section class="gradient-bg text-white pt-32 pb-24 overflow-hidden">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <div class="max-w-4xl mx-auto">
+                <h1 class="text-5xl md:text-7xl font-bold mb-8 bg-gradient-to-r from-white to-gray-200 bg-clip-text text-transparent">
+                    Sistem Informasi<br>
+                    <span class="text-6xl md:text-8xl bg-gradient-to-r from-yellow-300 to-orange-400 bg-clip-text text-transparent">Magang PTUN</span>
+                </h1>
+                <p class="text-xl md:text-2xl text-blue-100 mb-12 leading-relaxed max-w-2xl mx-auto">
+                    Platform terintegrasi untuk pengelolaan absensi, perkara, laporan, dan sertifikat 
+                    magang di Pengadilan Tata Usaha Negara Banjarmasin
+                </p>
+                <div class="flex flex-col sm:flex-row gap-4 justify-center items-center max-w-2xl mx-auto">
+                    <a href="#" class="bg-white text-primary-700 px-10 py-5 rounded-2xl font-bold text-lg hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 flex items-center">
+                        <i class="fas fa-rocket ml-3 text-2xl"></i>
+                        Mulai Magang
+                    </a>
+                    <a href="#" class="border-2 border-white/50 text-white px-10 py-5 rounded-2xl font-bold text-lg hover:bg-white/20 backdrop-blur-sm transition-all flex items-center">
+                        <i class="fas fa-play-circle ml-3 text-2xl"></i>
+                        Demo Dashboard
+                    </a>
+                </div>
+            </div>
+            <div class="mt-24 grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+                <div class="text-center p-8 rounded-3xl bg-white/10 backdrop-blur-lg border border-white/20 hover:scale-105 transition-all">
+                    <div class="w-20 h-20 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                        <i class="fas fa-users text-3xl text-white"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4">500+</h3>
+                    <p class="text-blue-100">Peserta Magang</p>
+                </div>
+                <div class="text-center p-8 rounded-3xl bg-white/10 backdrop-blur-lg border border-white/20 hover:scale-105 transition-all">
+                    <div class="w-20 h-20 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                        <i class="fas fa-calendar-check text-3xl text-white"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4">12.000+</h3>
+                    <p class="text-blue-100">Absensi Tersimpan</p>
+                </div>
+                <div class="text-center p-8 rounded-3xl bg-white/10 backdrop-blur-lg border border-white/20 hover:scale-105 transition-all">
+                    <div class="w-20 h-20 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                        <i class="fas fa-award text-3xl text-white"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4">98%</h3>
+                    <p class="text-blue-100">Tingkat Kehadiran</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FEATURES CARDS -->
+    <section class="py-24 bg-gradient-to-b from-gray-50 to-white">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-24">
+                <h2 class="text-4xl md:text-5xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent mb-6">
+                    Fitur Lengkap SIM PTUN
+                </h2>
+                <p class="text-xl text-gray-600 max-w-3xl mx-auto">
+                    Sistem informasi modern untuk pengelolaan magang yang terintegrasi dan efisien
+                </p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <div class="group p-8 rounded-3xl bg-white shadow-xl hover:shadow-2xl hover:-translate-y-4 transition-all duration-500 border border-gray-100">
+                    <div class="w-16 h-16 bg-gradient-to-r from-primary-500 to-primary-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-all">
+                        <i class="fas fa-calendar-day text-2xl text-white"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-4">Absensi Digital</h3>
+                    <p class="text-gray-600 leading-relaxed">Cek-in harian otomatis dengan geo-location dan approval admin real-time</p>
+                </div>
+                <div class="group p-8 rounded-3xl bg-white shadow-xl hover:shadow-2xl hover:-translate-y-4 transition-all duration-500 border border-gray-100">
+                    <div class="w-16 h-16 bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-all">
+                        <i class="fas fa-file-alt text-2xl text-white"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-4">Perkara Harian</h3>
+                    <p class="text-gray-600 leading-relaxed">Input data perkara dengan upload bukti dan workflow approval 3 tingkat</p>
+                </div>
+                <div class="group p-8 rounded-3xl bg-white shadow-xl hover:shadow-2xl hover:-translate-y-4 transition-all duration-500 border border-gray-100">
+                    <div class="w-16 h-16 bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-all">
+                        <i class="fas fa-chart-line text-2xl text-white"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-4">Laporan 5 Jenis</h3>
+                    <p class="text-gray-600 leading-relaxed">Generate otomatis Harian, Mingguan, Bulanan, Ringkasan, dan Final Report</p>
+                </div>
+                <div class="group p-8 rounded-3xl bg-white shadow-xl hover:shadow-2xl hover:-translate-y-4 transition-all duration-500 border border-gray-100">
+                    <div class="w-16 h-16 bg-gradient-to-r from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-all">
+                        <i class="fas fa-certificate text-2xl text-white"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-4">Sertifikat Digital</h3>
+                    <p class="text-gray-600 leading-relaxed">Sertifikat otomatis dengan penilaian final dan tanda tangan digital</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- DASHBOARD PREVIEW -->
+    <section class="py-24 bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center mb-20">
+                <h2 class="text-4xl md:text-5xl font-bold text-gray-900 mb-6">Dashboard Peserta</h2>
+                <p class="text-xl text-gray-600">Preview dashboard modern untuk peserta magang</p>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <!-- PESERTA 1 - RAJIN -->
+                <div class="bg-white rounded-3xl shadow-2xl p-8 border border-gray-100 hover:shadow-3xl transition-all">
+                    <div class="flex items-center mb-8">
+                        <div class="w-16 h-16 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center mr-4">
+                            <i class="fas fa-user-check text-2xl text-white"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-2xl font-bold text-gray-900">Dian Putri</h3>
+                            <p class="text-emerald-600 font-semibold">Status: AKTIF</p>
+                        </div>
+                    </div>
+                    <div class="space-y-6">
+                        <div class="grid grid-cols-2 gap-4 p-6 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl">
+                            <div><p class="text-sm text-gray-600">Hadir</p><p class="text-2xl font-bold text-emerald-600">12/15</p></div>
+                            <div><p class="text-sm text-gray-600">Perkara</p><p class="text-2xl font-bold text-blue-600">9</p></div>
+                        </div>
+                        <div class="flex space-x-3">
+                            <button class="flex-1 bg-primary-600 text-white py-3 px-6 rounded-xl font-bold hover:bg-primary-700 transition-all">
+                                <i class="fas fa-calendar-check mr-2"></i>Absensi
+                            </button>
+                            <button class="flex-1 bg-emerald-600 text-white py-3 px-6 rounded-xl font-bold hover:bg-emerald-700 transition-all">
+                                <i class="fas fa-file-alt mr-2"></i>Laporan
+                            </button>
+                        </div>
+                        <div class="text-center py-4 bg-orange-50 rounded-xl">
+                            <p class="text-sm font-medium text-orange-800">Sertifikat: Pending Penilaian</p>
+                        </div>
+                    </div>
+                </div>
+                <!-- PESERTA 2 - PERFECT -->
+                <div class="bg-white rounded-3xl shadow-2xl p-8 border border-gray-100 hover:shadow-3xl transition-all">
+                    <div class="flex items-center mb-8">
+                        <div class="w-16 h-16 bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center mr-4">
+                            <i class="fas fa-crown text-2xl text-white"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-2xl font-bold text-gray-900">Rina Kartika</h3>
+                            <p class="text-green-600 font-semibold">Status: SELESAI</p>
+                        </div>
+                    </div>
+                    <div class="space-y-6">
+                        <div class="grid grid-cols-2 gap-4 p-6 bg-gradient-to-r from-green-50 to-emerald-50 rounded-2xl">
+                            <div><p class="text-sm text-gray-600">Hadir</p><p class="text-2xl font-bold text-green-600">15/15</p></div>
+                            <div><p class="text-sm text-gray-600">Perkara</p><p class="text-2xl font-bold text-blue-600">12</p></div>
+                        </div>
+                        <button class="w-full bg-gradient-to-r from-green-600 to-emerald-700 text-white py-4 px-8 rounded-2xl font-bold text-lg shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all">
+                            <i class="fas fa-download mr-3"></i>Unduh Sertifikat
+                        </button>
+                    </div>
+                </div>
+                <!-- ADMIN DASHBOARD PREVIEW -->
+                <div class="lg:col-span-1 bg-gradient-to-br from-primary-600 to-primary-700 text-white rounded-3xl p-8 shadow-2xl hover:shadow-3xl transition-all">
+                    <h3 class="text-2xl font-bold mb-8 text-center">Admin Dashboard</h3>
+                    <div class="space-y-4 text-sm">
+                        <div class="flex justify-between p-4 bg-white/20 rounded-xl backdrop-blur-sm">
+                            <span>Total Peserta</span>
+                            <span class="font-bold text-2xl">5</span>
+                        </div>
+                        <div class="flex justify-between p-4 bg-white/20 rounded-xl backdrop-blur-sm">
+                            <span>Aktif Magang</span>
+                            <span class="font-bold text-2xl text-emerald-300">4</span>
+                        </div>
+                        <div class="flex justify-between p-4 bg-white/20 rounded-xl backdrop-blur-sm">
+                            <span>Pending Approval</span>
+                            <span class="font-bold text-2xl text-orange-300">7</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="bg-gradient-to-r from-gray-900 to-black text-white py-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-12">
+                <div>
+                    <div class="flex items-center mb-6">
+                        <div class="w-12 h-12 bg-primary-600 rounded-xl flex items-center justify-center mr-4">
+                            <i class="fas fa-balance-scale text-2xl text-white"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-2xl font-bold">PTUN Banjarmasin</h3>
+                            <p class="text-gray-400">Pengadilan Tata Usaha Negara</p>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="text-lg font-bold mb-6">SIM PTUN</h4>
+                    <ul class="space-y-3 text-gray-400">
+                        <li><a href="#" class="hover:text-white transition-colors">Dashboard Peserta</a></li>
+                        <li><a href="#" class="hover:text-white transition-colors">Absensi Digital</a></li>
+                        <li><a href="#" class="hover:text-white transition-colors">Kelola Sertifikat</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="text-lg font-bold mb-6">Kontak</h4>
+                    <div class="space-y-3 text-gray-400">
+                        <p><i class="fas fa-map-marker-alt mr-3"></i>Jl. Court of Justice No.123</p>
+                        <p><i class="fas fa-phone mr-3"></i>0511-123456</p>
+                        <p><i class="fas fa-envelope mr-3"></i>info@ptun-bjm.go.id</p>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="text-lg font-bold mb-6">Social Media</h4>
+                    <div class="flex space-x-4">
+                        <a href="#" class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center hover:bg-white/30 transition-all">
+                            <i class="fab fa-facebook-f text-white"></i>
+                        </a>
+                        <a href="#" class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center hover:bg-white/30 transition-all">
+                            <i class="fab fa-instagram text-white"></i>
+                        </a>
+                        <a href="#" class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center hover:bg-white/30 transition-all">
+                            <i class="fab fa-youtube text-white"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="border-t border-white/10 mt-16 pt-8 text-center text-gray-400">
+                <p>&copy; 2025 PTUN Banjarmasin. Hak Cipta Dilindungi. Dibuat dengan ❤️ untuk Keadilan Administrasi Negara.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Smooth scroll
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+
+        // Navbar scroll effect
+        window.addEventListener('scroll', () => {
+            const navbar = document.querySelector('nav');
+            if (window.scrollY > 50) {
+                navbar.classList.add('shadow-lg');
+            } else {
+                navbar.classList.remove('shadow-lg');
+            }
+        });
+    </script>
+</body>
+</html>
