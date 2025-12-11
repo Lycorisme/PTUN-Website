@@ -21,11 +21,11 @@ $total_peserta = $stmt->fetch()['total'];
 $stmt = db()->query("SELECT COUNT(*) as total FROM absensi WHERE approved=0");
 $pending_absensi = $stmt->fetch()['total'];
 
-// Aktivitas Pending (Pengganti Perkara)
+// Aktivitas Pending
 $stmt = db()->query("SELECT COUNT(*) as total FROM aktivitas WHERE approved=0");
 $pending_aktivitas = $stmt->fetch()['total'];
 
-// FIX: Mengganti Laporan Harian (yang dihapus) dengan Laporan Akhir (Ringkasan)
+// Laporan Akhir
 $stmt = db()->query("SELECT COUNT(*) as total FROM laporan_ringkasan");
 $total_laporan_akhir = $stmt->fetch()['total'];
 
@@ -151,7 +151,7 @@ require_once 'includes/header.php';
         </div>
     </div>
 
-    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
         <a href="registrasi/" class="p-4 bg-white rounded-2xl shadow-sm hover:shadow-md transition-all text-center group border border-gray-100 hover:border-green-200">
             <div class="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center mx-auto mb-3 text-green-600 group-hover:bg-green-600 group-hover:text-white transition-all">
                 <i class="fas fa-user-plus text-xl"></i>
@@ -170,6 +170,14 @@ require_once 'includes/header.php';
             </div>
             <p class="text-sm font-bold text-gray-700">Aktivitas</p>
         </a>
+        
+        <a href="penilaian/" class="p-4 bg-white rounded-2xl shadow-sm hover:shadow-md transition-all text-center group border border-gray-100 hover:border-teal-200">
+            <div class="w-12 h-12 bg-teal-50 rounded-xl flex items-center justify-center mx-auto mb-3 text-teal-600 group-hover:bg-teal-600 group-hover:text-white transition-all">
+                <i class="fas fa-star text-xl"></i>
+            </div>
+            <p class="text-sm font-bold text-gray-700">Penilaian</p>
+        </a>
+
         <a href="laporan/" class="p-4 bg-white rounded-2xl shadow-sm hover:shadow-md transition-all text-center group border border-gray-100 hover:border-pink-200">
             <div class="w-12 h-12 bg-pink-50 rounded-xl flex items-center justify-center mx-auto mb-3 text-pink-600 group-hover:bg-pink-600 group-hover:text-white transition-all">
                 <i class="fas fa-chart-bar text-xl"></i>
@@ -242,7 +250,7 @@ require_once 'includes/header.php';
 
 <div id="editModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
     <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8 transform scale-100 transition-transform">
-        <h3 class="text-2xl font-bold text-gray-900 mb-6">Update Status</h3>
+        <h3 class="text-2xl font-bold text-gray-900 mb-6">Update Status Peserta</h3>
         <form method="POST">
             <input type="hidden" name="peserta_id" id="edit_peserta_id">
             <div class="mb-6">
@@ -252,14 +260,14 @@ require_once 'includes/header.php';
             <div class="mb-6">
                 <label class="block text-sm font-bold text-gray-700 mb-2">Status Magang</label>
                 <select name="status" id="edit_status" class="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:border-blue-500 bg-white">
-                    <option value="pending">Pending</option>
-                    <option value="aktif">Aktif</option>
-                    <option value="selesai">Selesai</option>
+                    <option value="pending">Pending (Menunggu Persetujuan)</option>
+                    <option value="aktif">Aktif (Sedang Magang)</option>
+                    <option value="selesai">Selesai (Tamat)</option>
                 </select>
             </div>
             <div class="flex space-x-4">
                 <button type="submit" name="update_status" class="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-all">
-                    Simpan
+                    Simpan Perubahan
                 </button>
                 <button type="button" onclick="closeModal()" class="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition-all">
                     Batal

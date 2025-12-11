@@ -1,12 +1,11 @@
 <?php
 // =============================================
-// PESERTA DASHBOARD - AKTIVITAS VERSION
+// PESERTA DASHBOARD - REALTIME STATS FIX
 // =============================================
 
 require_once '../config/database.php';
-// session_start(); // DIHAPUS
 
-// Protect peserta page
+// Cek Login
 if(!isset($_SESSION['user_id']) || $_SESSION['role'] != 'peserta') {
     header('Location: ' . BASE_URL . '/index.php');
     exit;
@@ -29,24 +28,31 @@ if(isset($_GET['read_notif'])) {
     exit;
 }
 
-// STATS LOGIC
-$max_hari = absensi_max_hari();
-$stats = get_absensi_stats($peserta_id);
-$total_hadir = $stats['hadir'];
-$persentase = absensi_percentage($peserta_id);
+// 1. HITUNG STATISTIK REALTIME (TERMASUK PENDING)
+// Ambil max hari kerja dari settings (Default 22 hari jika belum diset)
+$max_hari = (int)get_setting('absensi_max_hari', 22);
 
-// GET AKTIVITAS COUNT (Updated from Perkara)
+// UPDATE: Hitung semua status 'hadir' (abaikan approval agar realtime update)
+$stmt = db()->prepare("SELECT COUNT(*) as total FROM absensi WHERE peserta_id=? AND status='hadir'");
+$stmt->execute([$peserta_id]);
+$total_hadir = $stmt->fetch()['total'];
+
+// Hitung Persentase
+$persentase = ($max_hari > 0) ? round(($total_hadir / $max_hari) * 100) : 0;
+if($persentase > 100) $persentase = 100; // Cap di 100% jika kelebihan
+
+// 2. GET AKTIVITAS COUNT
 $stmt = db()->prepare("SELECT COUNT(*) as total FROM aktivitas WHERE peserta_id=?");
 $stmt->execute([$peserta_id]);
 $total_aktivitas = $stmt->fetch()['total'];
 
-// GET SERTIFIKAT STATUS
+// 3. GET SERTIFIKAT STATUS
 $stmt = db()->prepare("SELECT status FROM sertifikat WHERE peserta_id=? LIMIT 1");
 $stmt->execute([$peserta_id]);
 $sertifikat = $stmt->fetch();
 $sertifikat_status = $sertifikat ? $sertifikat['status'] : 'pending';
 
-// GET NOTIFICATIONS
+// 4. GET NOTIFICATIONS
 $stmt = db()->prepare("SELECT * FROM notifications WHERE to_user_id=? ORDER BY created_at DESC LIMIT 10");
 $stmt->execute([$peserta_id]);
 $notifications = $stmt->fetchAll();
@@ -62,13 +68,22 @@ require_once 'includes/header.php';
         <div class="flex items-center justify-between relative z-10">
             <div>
                 <h2 class="text-3xl font-bold mb-2">Status: <?= strtoupper($user['status']) ?></h2>
-                <p class="text-xl text-emerald-100">Total Kehadiran: <?= $total_hadir ?>/<?= $max_hari ?> Hari</p>
-                <div class="mt-4 w-full bg-black/20 rounded-full h-3 max-w-md">
-                    <div class="bg-white rounded-full h-3 transition-all duration-1000" style="width: <?= $persentase ?>%"></div>
+                <p class="text-xl text-emerald-100">
+                    Total Kehadiran: <strong><?= $total_hadir ?></strong> / <?= $max_hari ?> Hari
+                </p>
+                
+                <div class="mt-4 w-full bg-black/20 rounded-full h-4 max-w-md backdrop-blur-sm overflow-hidden border border-white/10">
+                    <div class="bg-white/90 h-4 rounded-full transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(255,255,255,0.5)]" 
+                         style="width: <?= $persentase ?>%"></div>
                 </div>
+                <p class="text-xs text-emerald-100 mt-2 italic">*Data mencakup absensi pending & disetujui</p>
             </div>
-            <div class="w-24 h-24 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm border-2 border-white/30">
-                <span class="text-3xl font-bold"><?= $persentase ?>%</span>
+            
+            <div class="w-28 h-28 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-md border-4 border-white/30 shadow-lg">
+                <div class="text-center">
+                    <span class="text-3xl font-bold block"><?= $persentase ?>%</span>
+                    <span class="text-[10px] uppercase tracking-wider">Completed</span>
+                </div>
             </div>
         </div>
     </div>

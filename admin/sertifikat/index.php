@@ -1,6 +1,6 @@
 <?php
 // =============================================
-// ADMIN SERTIFIKAT - MANAGEMENT SYSTEM
+// ADMIN SERTIFIKAT - FIXED BULK DELETE & VALIDATION
 // =============================================
 
 require_once '../../config/database.php';
@@ -10,66 +10,108 @@ if(!isset($_SESSION['user_id']) || $_SESSION['role'] != 'admin') {
     exit;
 }
 
-// HANDLE GENERATE SERTIFIKAT
-if(isset($_POST['generate'])) {
-    $peserta_id = $_POST['peserta_id'];
-    $penilaian = $_POST['penilaian_final'];
-    $nomor = 'SERT/' . date('Y') . '/' . str_pad($peserta_id, 4, '0', STR_PAD_LEFT);
-    $file_path = 'uploads/sertifikat/sertifikat_' . $peserta_id . '.pdf'; 
-    
-    // Insert/Update dengan tanggal sekarang
-    $stmt = db()->prepare("
-        INSERT INTO sertifikat (peserta_id, nomor_sertifikat, file_path, issued_date, penilaian_final, status) 
-        VALUES (?, ?, ?, CURDATE(), ?, 'tersedia') 
-        ON DUPLICATE KEY UPDATE 
-            penilaian_final = VALUES(penilaian_final), 
-            status = 'tersedia', 
-            issued_date = CURDATE(),
-            nomor_sertifikat = VALUES(nomor_sertifikat)
-    ");
-    $stmt->execute([$peserta_id, $nomor, $file_path, $penilaian]);
-    
-    // Kirim Notifikasi ke Peserta
-    $stmt = db()->prepare("
-        INSERT INTO notifications (to_user_id, title, pesan, tipe, created_at) 
-        VALUES (?, 'Sertifikat Terbit', 'Selamat! Sertifikat magang Anda telah diterbitkan dan dapat diunduh.', 'success', NOW())
-    ");
-    $stmt->execute([$peserta_id]);
+// --- 1. HANDLE POST ACTIONS ---
 
-    header('Location: index.php?msg=generated');
-    exit;
+// A. GENERATE SERTIFIKAT
+if(isset($_POST['action']) && $_POST['action'] == 'generate') {
+    try {
+        $peserta_id = $_POST['peserta_id'];
+        $penilaian = $_POST['penilaian_final'];
+        $nomor = 'SERT/' . date('Y') . '/' . str_pad($peserta_id, 4, '0', STR_PAD_LEFT);
+        $file_path = 'uploads/sertifikat/sertifikat_' . $peserta_id . '.pdf'; 
+        
+        // Cek apakah user sudah punya sertifikat (Double Protection)
+        $check = db()->prepare("SELECT id FROM sertifikat WHERE peserta_id = ?");
+        $check->execute([$peserta_id]);
+        if($check->rowCount() > 0) {
+            header('Location: index.php?msg=exists');
+            exit;
+        }
+
+        $stmt = db()->prepare("INSERT INTO sertifikat (peserta_id, nomor_sertifikat, file_path, issued_date, penilaian_final, status) VALUES (?, ?, ?, CURDATE(), ?, 'tersedia')");
+        $stmt->execute([$peserta_id, $nomor, $file_path, $penilaian]);
+        
+        // Notifikasi
+        db()->prepare("INSERT INTO notifications (to_user_id, title, pesan, tipe) VALUES (?, 'Sertifikat Terbit', 'Sertifikat magang Anda telah terbit.', 'success')")->execute([$peserta_id]);
+
+        header('Location: index.php?msg=generated');
+        exit;
+    } catch (Exception $e) {
+        header('Location: index.php?msg=error');
+        exit;
+    }
 }
 
-// HANDLE DELETE SERTIFIKAT
-if(isset($_POST['delete'])) {
-    $peserta_id = $_POST['peserta_id'];
-    
-    // Hapus dari database
+// B. SINGLE DELETE
+if(isset($_POST['action']) && $_POST['action'] == 'delete_single') {
+    $id = $_POST['peserta_id']; // ID User/Peserta
     $stmt = db()->prepare("DELETE FROM sertifikat WHERE peserta_id = ?");
-    $stmt->execute([$peserta_id]);
-    
+    $stmt->execute([$id]);
     header('Location: index.php?msg=deleted');
     exit;
 }
 
-// GET DATA SERTIFIKAT
-$stmt = db()->query("
-    SELECT s.*, u.nama, u.instansi, u.id as user_id 
-    FROM sertifikat s 
-    JOIN users u ON s.peserta_id = u.id 
-    ORDER BY s.created_at DESC
-");
+// C. BULK DELETE (HAPUS BANYAK)
+if(isset($_POST['action']) && $_POST['action'] == 'delete_bulk') {
+    $ids_string = $_POST['bulk_ids']; // String "1,2,3"
+    
+    if(!empty($ids_string)) {
+        $ids = explode(',', $ids_string);
+        // Validasi array agar aman
+        $ids = array_map('intval', $ids);
+        
+        // Buat placeholder (?,?,?)
+        $placeholders = str_repeat('?,', count($ids) - 1) . '?';
+        
+        $stmt = db()->prepare("DELETE FROM sertifikat WHERE peserta_id IN ($placeholders)");
+        $stmt->execute($ids);
+        
+        header('Location: index.php?msg=bulk_deleted');
+        exit;
+    }
+}
+
+// --- 2. CONFIG PAGINATION & SEARCH ---
+$limit = 10;
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$start = ($page > 1) ? ($page * $limit) - $limit : 0;
+$search = isset($_GET['q']) ? trim($_GET['q']) : '';
+
+// Query Builder
+$where = "WHERE 1=1";
+$params = [];
+
+if($search) {
+    $where .= " AND (u.nama LIKE ? OR u.instansi LIKE ? OR s.nomor_sertifikat LIKE ?)";
+    $params = array_fill(0, 3, "%$search%");
+}
+
+// Hitung Total
+$stmt = db()->prepare("SELECT COUNT(*) as total FROM sertifikat s JOIN users u ON s.peserta_id = u.id $where");
+$stmt->execute($params);
+$total_data = $stmt->fetch()['total'];
+$total_pages = ceil($total_data / $limit);
+
+// Get Data Sertifikat
+$sql = "SELECT s.*, u.nama, u.instansi, u.id as user_id 
+        FROM sertifikat s 
+        JOIN users u ON s.peserta_id = u.id 
+        $where 
+        ORDER BY s.created_at DESC 
+        LIMIT $limit OFFSET $start";
+$stmt = db()->prepare($sql);
+$stmt->execute($params);
 $sertifikat_list = $stmt->fetchAll();
 
-// GET PESERTA LIST (Yang belum punya sertifikat)
-$stmt = db()->query("
+// GET AVAILABLE PESERTA (Filter: Yang BELUM punya sertifikat)
+$peserta_list = db()->query("
     SELECT u.id, u.nama, u.instansi 
     FROM users u 
     WHERE u.role = 'peserta' 
-    AND u.status = 'aktif' 
+    AND u.status = 'aktif'
+    AND u.id NOT IN (SELECT peserta_id FROM sertifikat)
     ORDER BY u.nama
-");
-$peserta_list = $stmt->fetchAll();
+")->fetchAll();
 
 $page_title = 'Kelola Sertifikat';
 require_once '../includes/header.php';
@@ -77,226 +119,255 @@ require_once '../includes/header.php';
 
 <div class="max-w-7xl mx-auto px-6 py-8">
     
-    <?php if(isset($_GET['msg'])): ?>
-    <div class="mb-8 p-4 rounded-xl shadow-lg animate-fade-in <?= $_GET['msg']=='deleted' ? 'bg-red-100 border-l-4 border-red-500 text-red-700' : 'bg-green-100 border-l-4 border-green-500 text-green-700' ?>">
-        <div class="flex items-center">
-            <i class="fas <?= $_GET['msg']=='deleted' ? 'fa-trash' : 'fa-check-circle' ?> text-2xl mr-3"></i>
-            <span class="font-semibold">
-                <?php 
-                if($_GET['msg'] == 'generated') echo 'Sertifikat berhasil di-generate!';
-                elseif($_GET['msg'] == 'deleted') echo 'Sertifikat berhasil dihapus!';
-                ?>
-            </span>
-        </div>
-    </div>
-    <?php endif; ?>
-
-    <div class="bg-white rounded-3xl shadow-xl overflow-hidden">
-        <div class="bg-gradient-to-r from-orange-500 to-red-600 p-8">
-            <div class="flex justify-between items-center">
-                <div>
-                    <h2 class="text-3xl font-bold text-white mb-2">Kelola Sertifikat</h2>
-                    <p class="text-orange-100">Buat dan kelola sertifikat magang peserta</p>
-                </div>
-                <button onclick="showGenerateModal()" class="bg-white text-orange-600 px-6 py-3 rounded-xl font-bold hover:bg-orange-50 transition-all shadow-lg flex items-center gap-2">
-                    <i class="fas fa-plus-circle text-xl"></i> Generate Baru
-                </button>
-            </div>
-        </div>
-
-        <div class="p-8">
-            <div class="overflow-x-auto">
-                <table class="w-full">
-                    <thead>
-                        <tr class="border-b-2 border-gray-200 bg-gray-50">
-                            <th class="text-left py-4 px-4 font-bold text-gray-700">Nomor Sertifikat</th>
-                            <th class="text-left py-4 px-4 font-bold text-gray-700">Nama Peserta</th>
-                            <th class="text-left py-4 px-4 font-bold text-gray-700">Instansi</th>
-                            <th class="text-center py-4 px-4 font-bold text-gray-700">Nilai Akhir</th>
-                            <th class="text-center py-4 px-4 font-bold text-gray-700">Tanggal Terbit</th>
-                            <th class="text-center py-4 px-4 font-bold text-gray-700">Status</th>
-                            <th class="text-center py-4 px-4 font-bold text-gray-700">Aksi</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if(empty($sertifikat_list)): ?>
-                            <tr>
-                                <td colspan="7" class="p-12 text-center">
-                                    <div class="text-gray-400">
-                                        <i class="fas fa-certificate text-6xl mb-4"></i>
-                                        <p class="text-lg font-semibold">Belum ada sertifikat yang diterbitkan</p>
-                                        <p class="text-sm mt-2">Klik "Generate Baru" untuk membuat sertifikat</p>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php else: ?>
-                            <?php foreach($sertifikat_list as $s): ?>
-                            <tr class="border-b hover:bg-blue-50 transition-colors">
-                                <td class="py-4 px-4">
-                                    <span class="font-mono text-sm bg-blue-100 text-blue-800 px-3 py-1 rounded-lg font-bold">
-                                        <?= htmlspecialchars($s['nomor_sertifikat']) ?>
-                                    </span>
-                                </td>
-                                <td class="py-4 px-4 font-semibold text-gray-800">
-                                    <?= htmlspecialchars($s['nama']) ?>
-                                </td>
-                                <td class="py-4 px-4 text-sm text-gray-600">
-                                    <?= htmlspecialchars($s['instansi']) ?>
-                                </td>
-                                <td class="py-4 px-4 text-center">
-                                    <span class="font-bold text-lg text-green-600">
-                                        <?= number_format($s['penilaian_final'], 2) ?>
-                                    </span>
-                                </td>
-                                <td class="py-4 px-4 text-center text-sm text-gray-700">
-                                    <?php 
-                                    if(!empty($s['issued_date']) && $s['issued_date'] !== '0000-00-00') {
-                                        echo '<i class="fas fa-calendar-alt text-blue-500 mr-2"></i>';
-                                        echo date('d/m/Y', strtotime($s['issued_date']));
-                                    } else {
-                                        echo '<span class="text-gray-400">-</span>';
-                                    }
-                                    ?>
-                                </td>
-                                <td class="py-4 px-4 text-center">
-                                    <span class="px-4 py-1.5 rounded-full text-xs font-bold uppercase bg-green-100 text-green-800 border border-green-300">
-                                        <i class="fas fa-check-circle mr-1"></i>
-                                        <?= htmlspecialchars($s['status']) ?>
-                                    </span>
-                                </td>
-                                <td class="py-4 px-4 text-center">
-                                    <div class="flex items-center justify-center gap-2">
-                                        <a href="cetak.php?id=<?= $s['user_id'] ?>" target="_blank" 
-                                           class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-all font-bold text-sm inline-flex items-center shadow-md">
-                                            <i class="fas fa-file-pdf mr-2"></i> PDF
-                                        </a>
-                                        <button onclick="confirmDelete(<?= $s['user_id'] ?>)" 
-                                                class="bg-gray-100 text-red-600 px-4 py-2 rounded-lg hover:bg-red-600 hover:text-white transition-all font-bold text-sm">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <!-- INFO BOX -->
-    <div class="mt-8 bg-blue-50 border-l-4 border-blue-500 p-6 rounded-xl">
-        <div class="flex items-start">
-            <i class="fas fa-info-circle text-blue-500 text-2xl mr-4 mt-1"></i>
-            <div>
-                <h4 class="font-bold text-blue-900 mb-2">Informasi Template Sertifikat</h4>
-                <ul class="text-sm text-blue-800 space-y-1">
-                    <li>• Template sertifikat dapat dikustomisasi di menu <strong>Pengaturan > Sistem</strong></li>
-                    <li>• Upload background sertifikat untuk tampilan yang lebih profesional</li>
-                    <li>• Nilai akhir akan otomatis muncul di sertifikat</li>
-                    <li>• QR Code validasi otomatis dibuat untuk setiap sertifikat</li>
-                </ul>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- MODAL GENERATE -->
-<div id="generateModal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-8 transform scale-100 transition-transform">
-        <div class="flex items-center mb-6">
-            <div class="bg-orange-100 p-3 rounded-full mr-4">
-                <i class="fas fa-certificate text-orange-600 text-2xl"></i>
-            </div>
-            <div>
-                <h3 class="text-2xl font-bold text-gray-900">Generate Sertifikat</h3>
-                <p class="text-sm text-gray-500">Buat sertifikat baru untuk peserta</p>
-            </div>
+    <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+        <div>
+            <h2 class="text-3xl font-bold text-gray-800">Data Sertifikat</h2>
         </div>
         
-        <form method="POST">
-            <div class="space-y-6">
-                <div>
-                    <label class="block font-bold text-gray-700 mb-2">
-                        <i class="fas fa-user mr-2 text-blue-500"></i>Pilih Peserta
-                    </label>
-                    <select name="peserta_id" required class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none">
-                        <option value="">-- Pilih Peserta --</option>
-                        <?php foreach($peserta_list as $p): ?>
-                        <option value="<?= $p['id'] ?>">
-                            <?= htmlspecialchars($p['nama']) ?> - <?= htmlspecialchars($p['instansi']) ?>
-                        </option>
+        <div class="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            <button onclick="confirmBulkDelete()" id="btnBulkDelete" class="hidden bg-red-600 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-red-700 transition-all flex items-center whitespace-nowrap">
+                <i class="fas fa-trash-alt mr-2"></i> Hapus Terpilih
+            </button>
+
+            <button onclick="showGenerateModal()" class="bg-orange-600 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow hover:bg-orange-700 transition-all flex items-center whitespace-nowrap">
+                <i class="fas fa-plus-circle mr-2"></i> Buat Baru
+            </button>
+
+            <form method="GET" class="relative w-full md:w-64">
+                <input type="text" name="q" value="<?= htmlspecialchars($search) ?>" placeholder="Cari sertifikat..." 
+                       class="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none transition-all shadow-sm">
+                <button type="submit" class="absolute left-3 top-3.5 text-gray-400">
+                    <i class="fas fa-search"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-100">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="bg-gray-50 border-b border-gray-200 text-xs uppercase text-gray-500 tracking-wider">
+                        <th class="p-4 w-10 text-center">
+                            <input type="checkbox" id="checkAll" class="w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500 cursor-pointer">
+                        </th>
+                        <th class="p-4 font-bold">Nomor</th>
+                        <th class="p-4 font-bold">Peserta</th>
+                        <th class="p-4 font-bold text-center">Nilai</th>
+                        <th class="p-4 font-bold text-center">Tanggal</th>
+                        <th class="p-4 font-bold text-center">Aksi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if(empty($sertifikat_list)): ?>
+                        <tr>
+                            <td colspan="6" class="p-12 text-center text-gray-500">
+                                <i class="fas fa-certificate text-4xl mb-3 text-gray-300"></i>
+                                <p>Belum ada sertifikat <?= $search ? 'yang cocok' : '' ?>.</p>
+                            </td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach($sertifikat_list as $s): ?>
+                        <tr class="border-b hover:bg-orange-50/30 transition-colors">
+                            <td class="p-4 text-center">
+                                <input type="checkbox" name="ids[]" value="<?= $s['user_id'] ?>" class="row-checkbox w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500 cursor-pointer">
+                            </td>
+                            <td class="p-4">
+                                <span class="font-mono text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded border border-gray-200">
+                                    <?= htmlspecialchars($s['nomor_sertifikat']) ?>
+                                </span>
+                            </td>
+                            <td class="p-4">
+                                <p class="font-bold text-gray-800"><?= htmlspecialchars($s['nama']) ?></p>
+                                <p class="text-xs text-gray-500"><?= htmlspecialchars($s['instansi']) ?></p>
+                            </td>
+                            <td class="p-4 text-center">
+                                <span class="font-bold text-green-600 bg-green-50 px-2 py-1 rounded">
+                                    <?= number_format($s['penilaian_final'], 2) ?>
+                                </span>
+                            </td>
+                            <td class="p-4 text-center text-sm text-gray-600">
+                                <?= date('d/m/Y', strtotime($s['issued_date'])) ?>
+                            </td>
+                            <td class="p-4 text-center">
+                                <div class="flex justify-center gap-2">
+                                    <a href="cetak.php?id=<?= $s['user_id'] ?>" target="_blank" class="text-blue-600 hover:text-blue-800 bg-blue-50 p-2 rounded-lg transition-colors tooltip" title="Download PDF">
+                                        <i class="fas fa-file-pdf"></i>
+                                    </a>
+                                    <button onclick="confirmSingleDelete(<?= $s['user_id'] ?>)" class="text-red-600 hover:text-red-800 bg-red-50 p-2 rounded-lg transition-colors tooltip" title="Hapus">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
                         <?php endforeach; ?>
-                    </select>
-                </div>
-                
-                <div>
-                    <label class="block font-bold text-gray-700 mb-2">
-                        <i class="fas fa-star mr-2 text-yellow-500"></i>Nilai Akhir
-                    </label>
-                    <input type="number" name="penilaian_final" required min="0" max="100" step="0.01" 
-                           class="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:outline-none" 
-                           placeholder="Contoh: 85.50">
-                    <p class="text-xs text-gray-500 mt-2">
-                        <i class="fas fa-info-circle mr-1"></i>
-                        Nilai skala 0-100. Gunakan titik (.) untuk desimal.
-                    </p>
-                </div>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+
+        <?php if($total_pages > 1): ?>
+        <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 flex justify-center">
+            <div class="flex space-x-1">
+                <?php for($i=1; $i<=$total_pages; $i++): ?>
+                    <a href="?page=<?= $i ?>&q=<?= $search ?>" 
+                       class="w-8 h-8 flex items-center justify-center rounded-lg font-bold text-sm transition-all <?= $page == $i ? 'bg-orange-600 text-white shadow' : 'text-gray-500 hover:bg-gray-200' ?>">
+                        <?= $i ?>
+                    </a>
+                <?php endfor; ?>
             </div>
-            
-            <div class="flex space-x-4 mt-8">
-                <button type="submit" name="generate" 
-                        class="flex-1 bg-gradient-to-r from-orange-500 to-red-600 text-white py-3.5 rounded-xl font-bold hover:shadow-xl transition-all">
-                    <i class="fas fa-check mr-2"></i>Generate Sertifikat
-                </button>
-                <button type="button" onclick="closeModal()" 
-                        class="flex-1 bg-gray-100 text-gray-700 py-3.5 rounded-xl font-bold hover:bg-gray-200 transition-all">
-                    <i class="fas fa-times mr-2"></i>Batal
-                </button>
-            </div>
-        </form>
+        </div>
+        <?php endif; ?>
     </div>
 </div>
 
-<!-- FORM DELETE (HIDDEN) -->
-<form id="deleteForm" method="POST" class="hidden">
-    <input type="hidden" name="peserta_id" id="deletePesertaId">
-    <input type="hidden" name="delete" value="1">
+<div id="generateModal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-8 transform scale-100 transition-transform">
+        <h3 class="text-2xl font-bold text-gray-900 mb-6">Generate Sertifikat</h3>
+        
+        <?php if(empty($peserta_list)): ?>
+            <div class="bg-yellow-50 text-yellow-800 p-4 rounded-xl mb-4 border border-yellow-200">
+                <i class="fas fa-check-circle mr-2"></i> Semua peserta aktif saat ini sudah memiliki sertifikat.
+            </div>
+            <button type="button" onclick="closeModal()" class="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200">Tutup</button>
+        <?php else: ?>
+            <form method="POST">
+                <input type="hidden" name="action" value="generate">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block font-bold text-sm text-gray-700 mb-1">Peserta (Belum Punya Sertifikat)</label>
+                        <select name="peserta_id" required class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-orange-500 outline-none">
+                            <option value="">-- Pilih Peserta --</option>
+                            <?php foreach($peserta_list as $p): ?>
+                            <option value="<?= $p['id'] ?>"><?= htmlspecialchars($p['nama']) ?> - <?= htmlspecialchars($p['instansi']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-sm text-gray-700 mb-1">Nilai Akhir (0-99)</label>
+                        <input type="number" name="penilaian_final" required min="0" max="100" step="0.01" class="w-full px-4 py-2.5 border-2 border-gray-200 rounded-xl focus:border-orange-500 outline-none">
+                    </div>
+                </div>
+                <div class="flex space-x-3 mt-6">
+                    <button type="submit" class="flex-1 bg-orange-600 text-white py-3 rounded-xl font-bold hover:bg-orange-700 transition-all">Generate</button>
+                    <button type="button" onclick="closeModal()" class="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition-all">Batal</button>
+                </div>
+            </form>
+        <?php endif; ?>
+    </div>
+</div>
+
+<form id="singleDeleteForm" method="POST" class="hidden">
+    <input type="hidden" name="action" value="delete_single">
+    <input type="hidden" name="peserta_id" id="singleDeleteId">
 </form>
 
+<form id="bulkDeleteForm" method="POST" class="hidden">
+    <input type="hidden" name="action" value="delete_bulk">
+    <input type="hidden" name="bulk_ids" id="bulkDeleteIdsInput">
+</form>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-function showGenerateModal() {
-    document.getElementById('generateModal').classList.remove('hidden');
-}
+// 1. CHECKBOX LOGIC
+const checkAll = document.getElementById('checkAll');
+const checkboxes = document.querySelectorAll('.row-checkbox');
+const btnBulkDelete = document.getElementById('btnBulkDelete');
 
-function closeModal() {
-    document.getElementById('generateModal').classList.add('hidden');
-}
-
-function confirmDelete(pesertaId) {
-    if(confirm('Apakah Anda yakin ingin menghapus sertifikat ini?\n\nTindakan ini tidak dapat dibatalkan.')) {
-        document.getElementById('deletePesertaId').value = pesertaId;
-        document.getElementById('deleteForm').submit();
+function toggleButtons() {
+    const checkedCount = document.querySelectorAll('.row-checkbox:checked').length;
+    // Show button only if checkboxes are checked
+    if(checkedCount > 0) {
+        btnBulkDelete.classList.remove('hidden');
+    } else {
+        btnBulkDelete.classList.add('hidden');
     }
 }
 
-// Close modal on outside click
+if(checkAll) {
+    checkAll.addEventListener('change', function() {
+        checkboxes.forEach(cb => cb.checked = this.checked);
+        toggleButtons();
+    });
+}
+
+checkboxes.forEach(cb => {
+    cb.addEventListener('change', toggleButtons);
+});
+
+// 2. ACTIONS
+function confirmSingleDelete(id) {
+    Swal.fire({
+        title: 'Hapus Sertifikat?',
+        text: 'Data akan dihapus permanen dan tidak bisa dikembalikan.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        confirmButtonText: 'Ya, Hapus!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            document.getElementById('singleDeleteId').value = id;
+            document.getElementById('singleDeleteForm').submit();
+        }
+    });
+}
+
+function confirmBulkDelete() {
+    const selected = Array.from(document.querySelectorAll('.row-checkbox:checked')).map(cb => cb.value);
+    
+    if(selected.length === 0) return;
+
+    Swal.fire({
+        title: `Hapus ${selected.length} Sertifikat?`,
+        text: 'Data terpilih akan dihapus permanen.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        confirmButtonText: 'Ya, Hapus Semua!'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            document.getElementById('bulkDeleteIdsInput').value = selected.join(',');
+            document.getElementById('bulkDeleteForm').submit();
+        }
+    });
+}
+
+// 3. MODAL LOGIC
+function showGenerateModal() { document.getElementById('generateModal').classList.remove('hidden'); }
+function closeModal() { document.getElementById('generateModal').classList.add('hidden'); }
+
 document.getElementById('generateModal').addEventListener('click', function(e) {
-    if(e.target === this) {
-        closeModal();
-    }
+    if(e.target === this) closeModal();
 });
 
-// Close modal on ESC key
 document.addEventListener('keydown', function(e) {
-    if(e.key === 'Escape') {
-        closeModal();
-    }
+    if(e.key === 'Escape') closeModal();
 });
+
+// 4. NOTIFICATION
+<?php if(isset($_GET['msg'])): ?>
+    let msg = "<?= $_GET['msg'] ?>";
+    let title = "Berhasil";
+    let text = "Data berhasil diproses";
+    let icon = "success";
+
+    if(msg === 'exists') {
+        title = "Gagal";
+        text = "Peserta ini sudah memiliki sertifikat!";
+        icon = "error";
+    } else if (msg === 'deleted' || msg === 'bulk_deleted') {
+        text = "Data sertifikat berhasil dihapus.";
+    }
+
+    Swal.fire({
+        icon: icon,
+        title: title,
+        text: text,
+        timer: 2000,
+        showConfirmButton: false
+    });
+    window.history.replaceState(null, null, window.location.pathname);
+<?php endif; ?>
 </script>
 
 <?php require_once '../includes/sidebar.php'; ?>
-
-</body>
-</html>

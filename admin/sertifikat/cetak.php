@@ -1,7 +1,7 @@
 <?php
 /**
  * ==============================================================================================
- * MODUL PENCETAKAN SERTIFIKAT - FIXED NO BLANK PAGES
+ * MODUL PENCETAKAN SERTIFIKAT - FINAL WITH FULL TRANSCRIPT & ATTENDANCE
  * ==============================================================================================
  */
 
@@ -38,8 +38,11 @@ class CertificateGenerator {
             'kepala_jabatan' => 'Ketua Pengadilan',
             'pembimbing_nama'=> '..........................',
             'pembimbing_nip' => '',
-            'ttd_img_kepala'     => '', 
-            'ttd_img_pembimbing' => ''
+            'ttd_img_kepala' => '', 
+            'ttd_img_pembimbing' => '',
+            // Default Bobot
+            'sertifikat_bobot_hadir' => 60,
+            'sertifikat_bobot_laporan' => 40
         ];
         
         try {
@@ -55,13 +58,15 @@ class CertificateGenerator {
         return $defaults;
     }
 
-    // Ambil Data Peserta
+    // Ambil Data Peserta Lengkap (Termasuk Count Absensi)
     public function getAllData($peserta_id) {
         $sql = "SELECT 
                     u.nama, u.instansi, u.jurusan, 
                     s.nomor_sertifikat, s.issued_date,
                     p.disiplin, p.kerjasama, p.inisiatif, p.kerajinan, p.kualitas_kerja, 
-                    p.nilai_rata_rata
+                    p.nilai_rata_rata,
+                    (SELECT COUNT(*) FROM absensi WHERE peserta_id = u.id AND status = 'hadir') as total_hadir,
+                    (SELECT COUNT(*) FROM absensi WHERE peserta_id = u.id) as total_hari
                 FROM users u
                 LEFT JOIN sertifikat s ON u.id = s.peserta_id
                 LEFT JOIN penilaian p ON u.id = p.peserta_id
@@ -124,7 +129,7 @@ class CertificateGenerator {
         
         $settings = $this->getSettings();
         
-        // Setup Data Variables
+        // --- 1. PREPARE DATA ---
         $nama           = htmlspecialchars($data['nama'] ?? 'Peserta');
         $instansi_asal  = htmlspecialchars($data['instansi'] ?? '-');
         $nomor          = htmlspecialchars($data['nomor_sertifikat'] ?? 'DRAFT/'.date('Y'));
@@ -149,29 +154,36 @@ class CertificateGenerator {
         $ttd_kepala_src  = $this->getImageBase64($settings['ttd_img_kepala'], 'ttd');
         $ttd_pem_src     = $this->getImageBase64($settings['ttd_img_pembimbing'], 'ttd');
         
-        // HTML TTD
-        $html_ttd_kepala = $ttd_kepala_src 
-            ? "<img src='{$ttd_kepala_src}' class='ttd-image'>" 
-            : "<div class='ttd-spacer'></div>";
-            
-        $html_ttd_pem = $ttd_pem_src 
-            ? "<img src='{$ttd_pem_src}' class='ttd-image'>" 
-            : "<div class='ttd-spacer'></div>";
+        $html_ttd_kepala = $ttd_kepala_src ? "<img src='{$ttd_kepala_src}' class='ttd-image'>" : "<div class='ttd-spacer'></div>";
+        $html_ttd_pem    = $ttd_pem_src ? "<img src='{$ttd_pem_src}' class='ttd-image'>" : "<div class='ttd-spacer'></div>";
 
-        // Nilai
-        $aspek = [
-            'Kedisiplinan'   => $data['disiplin'] ?? 0,
-            'Kerjasama'      => $data['kerjasama'] ?? 0,
-            'Inisiatif'      => $data['inisiatif'] ?? 0,
-            'Kerajinan'      => $data['kerajinan'] ?? 0,
-            'Kualitas Kerja' => $data['kualitas_kerja'] ?? 0
+        // --- 2. KALKULASI NILAI (AKUMULASI) ---
+        $bobot_hadir   = (int)$settings['sertifikat_bobot_hadir'];
+        $bobot_laporan = (int)$settings['sertifikat_bobot_laporan'];
+
+        // Nilai Kinerja (5 Aspek)
+        $aspek_kinerja = [
+            'Kedisiplinan'   => floatval($data['disiplin'] ?? 0),
+            'Kerjasama'      => floatval($data['kerjasama'] ?? 0),
+            'Inisiatif'      => floatval($data['inisiatif'] ?? 0),
+            'Kerajinan'      => floatval($data['kerajinan'] ?? 0),
+            'Kualitas Kerja' => floatval($data['kualitas_kerja'] ?? 0)
         ];
-        $rata_rata = $data['nilai_rata_rata'] ?? 0;
-        if ($rata_rata == 0 && count($aspek) > 0) {
-            $rata_rata = round(array_sum($aspek) / count($aspek), 2);
-        }
+        $rata_kinerja = array_sum($aspek_kinerja) / count($aspek_kinerja);
 
-        // --- HTML TEMPLATE ---
+        // Nilai Absensi (Aspek ke-6)
+        $total_hari  = intval($data['total_hari'] ?? 0);
+        $total_hadir = intval($data['total_hadir'] ?? 0);
+        $nilai_absensi = ($total_hari > 0) ? ($total_hadir / $total_hari) * 100 : 0;
+
+        // Gabungkan untuk Tabel Transkrip
+        $all_grades = $aspek_kinerja;
+        $all_grades['Kehadiran / Absensi'] = $nilai_absensi;
+
+        // Nilai Akhir (Weighted)
+        $nilai_akhir = ($rata_kinerja * $bobot_laporan / 100) + ($nilai_absensi * $bobot_hadir / 100);
+
+        // --- 3. HTML TEMPLATE ---
         $html = "
         <!DOCTYPE html>
         <html>
@@ -179,116 +191,52 @@ class CertificateGenerator {
             <title>Sertifikat $nama</title>
             <style>
                 @page { margin: 0px; size: A4 landscape; }
-                body { 
-                    margin: 0px; padding: 0px; 
-                    font-family: 'Times New Roman', serif; 
-                    background: transparent;
-                }
+                body { margin: 0px; padding: 0px; font-family: 'Times New Roman', serif; background: transparent; }
                 
-                /* === FORCED BORDER === */
+                /* BORDER */
                 .frame-border {
-                    position: fixed;
-                    top: 15px; left: 15px; right: 15px; bottom: 15px;
-                    border: 5px double #1a4d80;
-                    z-index: -999;
+                    position: fixed; top: 15px; left: 15px; right: 15px; bottom: 15px;
+                    border: 5px double #1a4d80; z-index: -999;
                 }
                 .frame-inner {
-                    position: fixed;
-                    top: 25px; left: 25px; right: 25px; bottom: 25px;
-                    border: 1px solid #c5a059;
-                    z-index: -999;
+                    position: fixed; top: 25px; left: 25px; right: 25px; bottom: 25px;
+                    border: 1px solid #c5a059; z-index: -999;
                 }
 
-                /* === PAGE CONTENT === */
-                .page-content {
-                    width: 85%; margin: 0 auto; text-align: center;
-                    padding-top: 50px; /* Jarak aman dari border atas */
-                }
-                
+                /* CONTENT */
+                .page-content { width: 85%; margin: 0 auto; text-align: center; padding-top: 50px; }
                 .page-break { page-break-before: always; }
 
-                /* HEADER & TITLE */
+                /* TYPOGRAPHY */
                 .logo { height: 85px; margin-bottom: 10px; }
-                .header-instansi { 
-                    font-size: 24px; font-weight: bold; 
-                    text-transform: uppercase; color: #1a4d80; 
-                    letter-spacing: 2px; margin-bottom: 5px;
-                }
-                .separator { 
-                    width: 60%; height: 2px; 
-                    background: linear-gradient(to right, transparent, #999, transparent); 
-                    margin: 10px auto; 
-                }
-                .cert-title { 
-                    font-size: 46px; font-weight: bold; 
-                    color: #c5a059; margin: 15px 0 5px 0; 
-                    letter-spacing: 4px; text-shadow: 1px 1px 0px #333;
-                }
-                .cert-no { 
-                    font-family: 'Courier New', monospace; 
-                    font-size: 16px; color: #555; font-weight: bold;
-                    margin-bottom: 25px; 
-                }
+                .header-instansi { font-size: 24px; font-weight: bold; text-transform: uppercase; color: #1a4d80; letter-spacing: 2px; margin-bottom: 5px; }
+                .separator { width: 60%; height: 2px; background: linear-gradient(to right, transparent, #999, transparent); margin: 10px auto; }
+                .cert-title { font-size: 46px; font-weight: bold; color: #c5a059; margin: 15px 0 5px 0; letter-spacing: 4px; text-shadow: 1px 1px 0px #333; }
+                .cert-no { font-family: 'Courier New', monospace; font-size: 16px; color: #555; font-weight: bold; margin-bottom: 25px; }
                 
-                /* PESERTA */
                 .label-text { font-size: 16px; color: #444; margin-bottom: 5px; }
-                .peserta-nama { 
-                    font-size: 34px; font-weight: bold; color: #1a4d80;
-                    border-bottom: 2px solid #c5a059; 
-                    display: inline-block; padding-bottom: 5px; 
-                    margin-bottom: 10px; font-style: italic;
-                }
+                .peserta-nama { font-size: 34px; font-weight: bold; color: #1a4d80; border-bottom: 2px solid #c5a059; display: inline-block; padding-bottom: 5px; margin-bottom: 10px; font-style: italic; }
                 .peserta-instansi { font-size: 20px; font-weight: bold; color: #333; margin-bottom: 25px; }
                 
-                .description { 
-                    font-size: 16px; line-height: 1.5; color: #333; 
-                    margin: 0 auto 30px auto; width: 85%; 
-                }
+                .description { font-size: 16px; line-height: 1.5; color: #333; margin: 0 auto 30px auto; width: 85%; }
                 
-                /* TANDA TANGAN */
-                .ttd-table {
-                    width: 100%; border-collapse: collapse; margin-top: 10px;
-                }
-                .ttd-cell {
-                    width: 50%; text-align: center; vertical-align: bottom;
-                    padding: 0 10px;
-                }
-                .ttd-image {
-                    height: 80px; width: auto; display: block;
-                    margin: 0 auto -15px auto; position: relative; z-index: 10;
-                }
+                /* TTD */
+                .ttd-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                .ttd-cell { width: 50%; text-align: center; vertical-align: bottom; padding: 0 10px; }
+                .ttd-image { height: 80px; width: auto; display: block; margin: 0 auto -15px auto; position: relative; z-index: 10; }
                 .ttd-spacer { height: 80px; }
-                .ttd-name { 
-                    font-weight: bold; text-decoration: underline; 
-                    font-size: 16px; margin-top: 5px; position: relative; z-index: 11;
-                }
+                .ttd-name { font-weight: bold; text-decoration: underline; font-size: 16px; margin-top: 5px; position: relative; z-index: 11; }
                 .ttd-nip { font-size: 14px; color: #555; }
 
-                /* === HALAMAN 2: TRANSKRIP === */
-                .transkrip-box {
-                    padding-top: 60px; /* Jarak aman halaman 2 */
-                    width: 85%; margin: 0 auto;
-                    font-family: Arial, sans-serif;
-                }
-                .transkrip-title {
-                    font-size: 22px; font-weight: bold; text-transform: uppercase;
-                    border-bottom: 3px double #333; display: inline-block;
-                    margin-bottom: 30px; text-align: center;
-                }
+                /* TRANSKRIP */
+                .transkrip-box { padding-top: 60px; width: 85%; margin: 0 auto; font-family: Arial, sans-serif; }
+                .transkrip-title { font-size: 22px; font-weight: bold; text-transform: uppercase; border-bottom: 3px double #333; display: inline-block; margin-bottom: 30px; text-align: center; }
                 
-                .table-info { 
-                    width: 70%; margin: 0 auto 25px auto; 
-                    border-collapse: collapse; font-size: 14px; 
-                }
+                .table-info { width: 70%; margin: 0 auto 25px auto; border-collapse: collapse; font-size: 14px; }
                 .table-info td { padding: 5px; vertical-align: top; }
                 
-                .table-nilai { 
-                    width: 80%; margin: 0 auto; 
-                    border-collapse: collapse; font-size: 14px; 
-                }
-                .table-nilai th, .table-nilai td { 
-                    border: 1px solid #000; padding: 8px; text-align: center; 
-                }
+                .table-nilai { width: 80%; margin: 0 auto; border-collapse: collapse; font-size: 14px; }
+                .table-nilai th, .table-nilai td { border: 1px solid #000; padding: 8px; text-align: center; }
                 .table-nilai th { background: #f4f4f4; font-weight: bold; }
                 .text-left { text-align: left !important; padding-left: 15px !important; }
                 
@@ -344,21 +292,9 @@ class CertificateGenerator {
                 </div>
                 
                 <table class='table-info'>
-                    <tr>
-                        <td width='150'><strong>Nama Peserta</strong></td>
-                        <td width='10'>:</td>
-                        <td>$nama</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Instansi Asal</strong></td>
-                        <td>:</td>
-                        <td>$instansi_asal</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Nomor Sertifikat</strong></td>
-                        <td>:</td>
-                        <td>$nomor</td>
-                    </tr>
+                    <tr><td width='150'><strong>Nama Peserta</strong></td><td width='10'>:</td><td>$nama</td></tr>
+                    <tr><td><strong>Instansi Asal</strong></td><td>:</td><td>$instansi_asal</td></tr>
+                    <tr><td><strong>Nomor Sertifikat</strong></td><td>:</td><td>$nomor</td></tr>
                 </table>
                 
                 <table class='table-nilai'>
@@ -373,29 +309,33 @@ class CertificateGenerator {
                     <tbody>";
                     
                     $no = 1;
-                    foreach ($aspek as $key => $val) {
+                    foreach ($all_grades as $key => $val) {
                         $v_float = floatval($val);
                         list($grade, $ket) = $this->getPredikat($v_float);
                         $html .= "
                         <tr>
                             <td>$no</td>
                             <td class='text-left'>$key</td>
-                            <td>$v_float</td>
+                            <td>" . number_format($v_float, 2) . "</td>
                             <td>$grade</td>
                         </tr>";
                         $no++;
                     }
                     
-                    list($finalGrade, $finalKet) = $this->getPredikat($rata_rata);
+                    list($finalGrade, $finalKet) = $this->getPredikat($nilai_akhir);
 
         $html .= "
                         <tr style='background:#f4f4f4; font-weight:bold;'>
-                            <td colspan='2' style='text-align:right; padding-right:15px;'>RATA-RATA</td>
-                            <td>$rata_rata</td>
+                            <td colspan='2' style='text-align:right; padding-right:15px;'>NILAI AKHIR</td>
+                            <td>" . number_format($nilai_akhir, 2) . "</td>
                             <td>$finalGrade</td>
                         </tr>
                     </tbody>
                 </table>
+                
+                <div class='footer-note'>
+                    * Nilai Akhir dihitung berdasarkan bobot $bobot_laporan% Nilai Kinerja dan $bobot_hadir% Kehadiran.
+                </div>
             </div>
 
         </body>
