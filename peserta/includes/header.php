@@ -20,12 +20,12 @@ if($user_id) {
 
 // 2. GET FAVICON & LOGO
 $favicon_url = get_setting('favicon');
-if($favicon_url && !str_starts_with($favicon_url, 'http')) {
+if($favicon_url && strpos($favicon_url, 'http') !== 0) {
     $favicon_url = BASE_URL . $favicon_url;
 }
 
 $logo_url = get_logo_url();
-if($logo_url && !str_starts_with($logo_url, 'http')) {
+if($logo_url && strpos($logo_url, 'http') !== 0) {
     $logo_url = BASE_URL . $logo_url;
 }
 ?>
