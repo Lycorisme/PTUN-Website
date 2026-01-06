@@ -3,9 +3,35 @@
 // CONFIG/DATABASE.PHP - PTUN WEBSITE
 // =============================================
 
-// 1. DEFINISI BASE URL (Ganti sesuai nama folder project Anda)
-// Jika di Laragon folder project Anda 'ptun-website', maka:
-define('BASE_URL', 'http://localhost/ptun-website'); 
+// 1. DEFINISI BASE URL DINAMIS
+// Otomatis mendeteksi protocol (http/https), host, dan path
+$protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+$script_path = dirname($_SERVER['SCRIPT_NAME']);
+
+// Deteksi folder project dari path
+$path_parts = explode('/', trim($script_path, '/'));
+$base_path = '';
+
+// Cari posisi folder 'ptun-website' dalam path
+foreach ($path_parts as $index => $part) {
+    if ($part === 'ptun-website') {
+        $base_path = '/' . implode('/', array_slice($path_parts, 0, $index + 1));
+        break;
+    }
+}
+
+// Jika tidak ditemukan, gunakan root atau folder pertama
+if (empty($base_path) && !empty($path_parts[0])) {
+    // Cek apakah kita di root project
+    if (file_exists($_SERVER['DOCUMENT_ROOT'] . '/ptun-website')) {
+        $base_path = '/ptun-website';
+    } elseif (file_exists($_SERVER['DOCUMENT_ROOT'] . '/' . $path_parts[0])) {
+        $base_path = '/' . $path_parts[0];
+    }
+}
+
+define('BASE_URL', $protocol . '://' . $host . $base_path); 
 
 class Database {
     private $host = 'localhost';
