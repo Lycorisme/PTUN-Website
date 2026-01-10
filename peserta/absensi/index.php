@@ -12,14 +12,19 @@ $peserta_id = $user['id'];
 
 // HANDLE CEK-IN
 if(isset($_POST['checkin'])) {
-    $tanggal = date('Y-m-d');
+    // Gunakan tanggal dari perangkat client (browser)
+    $tanggal = $_POST['client_date'] ?? date('Y-m-d');
+    // Validasi format tanggal
+    if(!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tanggal)) {
+        $tanggal = date('Y-m-d');
+    }
     $catatan = $_POST['catatan'] ?? '';
     
     $stmt = db()->prepare("SELECT id FROM absensi WHERE peserta_id=? AND tanggal=?");
     $stmt->execute([$peserta_id, $tanggal]);
     
     if($stmt->fetch()) {
-        $error = "Anda sudah absen hari ini!";
+        $error = "Anda sudah absen untuk tanggal tersebut!";
     } else {
         $stmt = db()->prepare("INSERT INTO absensi (peserta_id, tanggal, status, catatan, approved) VALUES (?, ?, 'hadir', ?, 0)");
         $stmt->execute([$peserta_id, $tanggal, $catatan]);
@@ -33,11 +38,7 @@ $stmt = db()->prepare("SELECT * FROM absensi WHERE peserta_id=? ORDER BY tanggal
 $stmt->execute([$peserta_id]);
 $riwayat = $stmt->fetchAll();
 
-$today = date('Y-m-d');
-$stmt = db()->prepare("SELECT id FROM absensi WHERE peserta_id=? AND tanggal=?");
-$stmt->execute([$peserta_id, $today]);
-$already_checked_in = $stmt->fetch() ? true : false;
-
+// Cek status hari ini akan ditentukan oleh JavaScript di client
 $page_title = 'Absensi Harian';
 require_once '../includes/header.php';
 ?>
@@ -65,31 +66,33 @@ require_once '../includes/header.php';
             <div class="flex items-center justify-between mb-6">
                 <div>
                     <h2 class="text-3xl font-bold mb-1">Cek-In Kehadiran</h2>
-                    <p class="text-green-100 text-lg"><?= format_tanggal_id($today) ?></p>
+                    <p class="text-green-100 text-lg" id="client-date-display">Memuat tanggal...</p>
+                    <p class="text-green-200 text-sm mt-1" id="client-time-display"></p>
                 </div>
             </div>
             
-            <?php if($already_checked_in): ?>
-                <div class="bg-white/20 backdrop-blur-md rounded-2xl p-8 text-center border border-white/30">
-                    <div class="inline-flex bg-white text-green-600 rounded-full p-4 mb-4 shadow-lg">
-                        <i class="fas fa-check text-4xl"></i>
-                    </div>
-                    <h3 class="text-2xl font-bold">Terima Kasih!</h3>
-                    <p class="text-green-50 mt-1">Anda sudah melakukan absensi hari ini.</p>
+            <!-- Status absensi akan ditentukan oleh JavaScript -->
+            <div id="already-checked-in" class="hidden bg-white/20 backdrop-blur-md rounded-2xl p-8 text-center border border-white/30">
+                <div class="inline-flex bg-white text-green-600 rounded-full p-4 mb-4 shadow-lg">
+                    <i class="fas fa-check text-4xl"></i>
                 </div>
-            <?php else: ?>
-                <form method="POST" class="space-y-4 bg-white/10 backdrop-blur-sm p-6 rounded-2xl border border-white/20">
-                    <div>
-                        <label class="block text-sm font-bold mb-2 text-green-50">Catatan Harian (Opsional)</label>
-                        <textarea name="catatan" rows="2" placeholder="Sedang mengerjakan apa hari ini..."
-                                  class="w-full px-4 py-3 border-0 rounded-xl text-gray-900 focus:ring-4 focus:ring-green-400 placeholder-gray-400 bg-white/90"></textarea>
-                    </div>
-                    <button type="submit" name="checkin" 
-                            class="w-full bg-white text-green-700 py-4 rounded-xl font-bold text-lg hover:shadow-lg hover:bg-green-50 transition-all transform hover:-translate-y-1">
-                        <i class="fas fa-fingerprint mr-2"></i>KLIK UNTUK ABSEN
-                    </button>
-                </form>
-            <?php endif; ?>
+                <h3 class="text-2xl font-bold">Terima Kasih!</h3>
+                <p class="text-green-50 mt-1">Anda sudah melakukan absensi hari ini.</p>
+            </div>
+            
+            <form method="POST" id="checkin-form" class="space-y-4 bg-white/10 backdrop-blur-sm p-6 rounded-2xl border border-white/20">
+                <!-- Hidden input untuk tanggal dari perangkat client -->
+                <input type="hidden" name="client_date" id="client_date" value="">
+                <div>
+                    <label class="block text-sm font-bold mb-2 text-green-50">Catatan Harian (Opsional)</label>
+                    <textarea name="catatan" rows="2" placeholder="Sedang mengerjakan apa hari ini..."
+                              class="w-full px-4 py-3 border-0 rounded-xl text-gray-900 focus:ring-4 focus:ring-green-400 placeholder-gray-400 bg-white/90"></textarea>
+                </div>
+                <button type="submit" name="checkin" 
+                        class="w-full bg-white text-green-700 py-4 rounded-xl font-bold text-lg hover:shadow-lg hover:bg-green-50 transition-all transform hover:-translate-y-1">
+                    <i class="fas fa-fingerprint mr-2"></i>KLIK UNTUK ABSEN
+                </button>
+            </form>
         </div>
     </div>
 
@@ -131,12 +134,73 @@ require_once '../includes/header.php';
 </div>
 
 <script>
+// Data riwayat absensi dari server (untuk pengecekan di client-side)
+const riwayatAbsensi = <?= json_encode(array_column($riwayat, 'tanggal')) ?>;
+
+// Fungsi untuk format tanggal dalam bahasa Indonesia
+function formatTanggalId(date) {
+    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    return date.toLocaleDateString('id-ID', options);
+}
+
+// Fungsi untuk format waktu
+function formatWaktu(date) {
+    return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+// Fungsi untuk mendapatkan tanggal dalam format Y-m-d
+function getDateString(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+// Fungsi utama untuk update tampilan
+function updateDisplay() {
+    const now = new Date();
+    const dateString = getDateString(now);
+    
+    // Update tampilan tanggal dan waktu
+    document.getElementById('client-date-display').textContent = formatTanggalId(now);
+    document.getElementById('client-time-display').textContent = 'Waktu perangkat: ' + formatWaktu(now);
+    
+    // Set hidden input dengan tanggal dari perangkat
+    document.getElementById('client_date').value = dateString;
+    
+    // Cek apakah sudah absen hari ini (berdasarkan data riwayat)
+    const alreadyCheckedIn = riwayatAbsensi.includes(dateString);
+    
+    if (alreadyCheckedIn) {
+        document.getElementById('already-checked-in').classList.remove('hidden');
+        document.getElementById('checkin-form').classList.add('hidden');
+    } else {
+        document.getElementById('already-checked-in').classList.add('hidden');
+        document.getElementById('checkin-form').classList.remove('hidden');
+    }
+}
+
+// Update tampilan saat halaman dimuat
+updateDisplay();
+
+// Update waktu setiap detik
+setInterval(() => {
+    const now = new Date();
+    document.getElementById('client-time-display').textContent = 'Waktu perangkat: ' + formatWaktu(now);
+    
+    // Update tanggal jika berubah (misalnya melewati tengah malam)
+    const currentDate = getDateString(now);
+    if (document.getElementById('client_date').value !== currentDate) {
+        updateDisplay();
+    }
+}, 1000);
+
 <?php if(isset($_GET['msg'])): ?>
 Swal.fire({
     icon: 'success',
     title: 'Berhasil!',
-    text: 'Absensi tercatat.',
-    timer: 2000,
+    text: 'Absensi tercatat untuk ' + formatTanggalId(new Date()),
+    timer: 2500,
     showConfirmButton: false
 });
 <?php endif; ?>

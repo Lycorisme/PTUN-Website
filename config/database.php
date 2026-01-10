@@ -3,42 +3,74 @@
 // CONFIG/DATABASE.PHP - PTUN WEBSITE
 // =============================================
 
-// 1. DEFINISI BASE URL DINAMIS
-// Otomatis mendeteksi protocol (http/https), host, dan path
+// 1. DETEKSI ENVIRONMENT (Localhost vs Production)
+$is_localhost = in_array($_SERVER['HTTP_HOST'] ?? 'localhost', [
+    'localhost', 
+    '127.0.0.1',
+    'localhost:8000',
+    'localhost:8080',
+    'ptun-website.test' // Jika menggunakan Laragon pretty URL
+]) || strpos($_SERVER['HTTP_HOST'] ?? '', 'localhost') !== false;
+
+// 2. DEFINISI BASE URL DINAMIS
 $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
 $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-$script_path = dirname($_SERVER['SCRIPT_NAME']);
 
-// Deteksi folder project dari path
-$path_parts = explode('/', trim($script_path, '/'));
-$base_path = '';
-
-// Cari posisi folder 'ptun-website' dalam path
-foreach ($path_parts as $index => $part) {
-    if ($part === 'ptun-website') {
-        $base_path = '/' . implode('/', array_slice($path_parts, 0, $index + 1));
-        break;
+if ($is_localhost) {
+    // LOCALHOST: Deteksi folder project
+    $script_path = dirname($_SERVER['SCRIPT_NAME']);
+    $path_parts = explode('/', trim($script_path, '/'));
+    $base_path = '';
+    
+    // Cari posisi folder 'ptun-website' dalam path
+    foreach ($path_parts as $index => $part) {
+        if ($part === 'ptun-website') {
+            $base_path = '/' . implode('/', array_slice($path_parts, 0, $index + 1));
+            break;
+        }
     }
+    
+    // Jika tidak ditemukan, cek di root
+    if (empty($base_path)) {
+        if (file_exists($_SERVER['DOCUMENT_ROOT'] . '/ptun-website')) {
+            $base_path = '/ptun-website';
+        }
+    }
+    
+    define('BASE_URL', $protocol . '://' . $host . $base_path);
+} else {
+    // PRODUCTION: Gunakan root domain langsung
+    define('BASE_URL', $protocol . '://' . $host);
 }
 
-// Jika tidak ditemukan, gunakan root atau folder pertama
-if (empty($base_path) && !empty($path_parts[0])) {
-    // Cek apakah kita di root project
-    if (file_exists($_SERVER['DOCUMENT_ROOT'] . '/ptun-website')) {
-        $base_path = '/ptun-website';
-    } elseif (file_exists($_SERVER['DOCUMENT_ROOT'] . '/' . $path_parts[0])) {
-        $base_path = '/' . $path_parts[0];
-    }
-}
-
-define('BASE_URL', $protocol . '://' . $host . $base_path); 
-
+// 3. DATABASE CREDENTIALS DINAMIS
 class Database {
-    private $host = 'localhost';
-    private $db_name = 'ptun_website';
-    private $username = 'root';
-    private $password = '';
+    private $host;
+    private $db_name;
+    private $username;
+    private $password;
     public $conn;
+    
+    public function __construct() {
+        // Deteksi environment
+        $is_localhost = in_array($_SERVER['HTTP_HOST'] ?? 'localhost', [
+            'localhost', '127.0.0.1', 'localhost:8000', 'localhost:8080', 'ptun-website.test'
+        ]) || strpos($_SERVER['HTTP_HOST'] ?? '', 'localhost') !== false;
+        
+        if ($is_localhost) {
+            // LOCALHOST (Laragon/XAMPP)
+            $this->host = 'localhost';
+            $this->db_name = 'ptun_website';
+            $this->username = 'root';
+            $this->password = '';
+        } else {
+            // PRODUCTION (InfinityFree)
+            $this->host = 'sql200.infinityfree.com';
+            $this->db_name = 'if0_40661903_ptun_db';
+            $this->username = 'if0_40661903';
+            $this->password = 'vhsL8QbkuB';
+        }
+    }
 
     public function getConnection() {
         $this->conn = null;
