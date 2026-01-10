@@ -22,6 +22,72 @@ $stmt_nilai = db()->prepare("SELECT * FROM penilaian WHERE peserta_id = ?");
 $stmt_nilai->execute([$user['id']]);
 $penilaian = $stmt_nilai->fetch();
 
+// =============================================
+// HITUNG NILAI AKHIR (SAMA DENGAN ADMIN SERTIFIKAT)
+// =============================================
+// Ambil settings bobot
+$bobot_hadir = intval(get_setting('sertifikat_bobot_hadir', 60));
+$bobot_laporan = intval(get_setting('sertifikat_bobot_laporan', 40));
+
+// VALIDASI: Pastikan total bobot = 100%
+// Jika tidak valid, gunakan default (60% kehadiran + 40% kinerja)
+if (($bobot_hadir + $bobot_laporan) != 100) {
+    $bobot_hadir = 60;
+    $bobot_laporan = 40;
+}
+
+$total_hari = intval(get_setting('absensi_max_hari', 30));
+
+// Hitung kehadiran
+$stmt_hadir = db()->prepare("SELECT COUNT(*) as total FROM absensi WHERE peserta_id = ? AND status = 'hadir'");
+$stmt_hadir->execute([$user['id']]);
+$kehadiran_data = $stmt_hadir->fetch();
+$total_hadir = intval($kehadiran_data['total'] ?? 0);
+
+// Nilai Kehadiran (skala 0-100)
+if ($total_hari > 0) {
+    $nilai_kehadiran = ($total_hadir / $total_hari) * 100;
+    $nilai_kehadiran = min($nilai_kehadiran, 100); // Batasi max 100%
+} else {
+    $nilai_kehadiran = 0;
+}
+
+// Hitung rata-rata kinerja (5 aspek)
+$aspek_kinerja = [
+    floatval($penilaian['disiplin'] ?? 0),
+    floatval($penilaian['kerjasama'] ?? 0),
+    floatval($penilaian['inisiatif'] ?? 0),
+    floatval($penilaian['kerajinan'] ?? 0),
+    floatval($penilaian['kualitas_kerja'] ?? 0)
+];
+$rata_kinerja = array_sum($aspek_kinerja) / count($aspek_kinerja);
+
+// Bobot per aspek kinerja
+$bobot_per_aspek = $bobot_laporan / 5;
+
+// Hitung kontribusi per aspek
+$kontribusi_kinerja = 0;
+foreach ($aspek_kinerja as $nilai) {
+    $kontribusi_kinerja += $nilai * $bobot_per_aspek / 100;
+}
+
+// Kontribusi kehadiran
+$kontribusi_hadir = $nilai_kehadiran * $bobot_hadir / 100;
+
+// NILAI AKHIR = total kontribusi semua komponen
+$nilai_akhir_hitung = $kontribusi_kinerja + $kontribusi_hadir;
+
+// Helper untuk predikat
+function getPredikatPeserta($nilai) {
+    $n = floatval($nilai);
+    if ($n >= 90) return ['A', 'Sangat Memuaskan'];
+    if ($n >= 80) return ['B', 'Memuaskan'];
+    if ($n >= 70) return ['C', 'Cukup'];
+    if ($n >= 60) return ['D', 'Kurang'];
+    return ['E', 'Tidak Lulus'];
+}
+list($predikat, $ket_predikat) = getPredikatPeserta($nilai_akhir_hitung);
+
 $page_title = 'Sertifikat Magang';
 require_once '../includes/header.php';
 ?>
@@ -86,10 +152,13 @@ require_once '../includes/header.php';
                         
                         <div class="bg-white/20 backdrop-blur-sm rounded-2xl p-6 my-8 max-w-md mx-auto">
                             <div class="text-5xl font-bold mb-2">
-                                <?= number_format($sertifikat['penilaian_final'], 2) ?>
+                                <?= number_format($nilai_akhir_hitung, 2) ?>
                             </div>
                             <div class="text-sm uppercase tracking-wider text-orange-100">
                                 Nilai Akhir Anda
+                            </div>
+                            <div class="text-xl font-semibold mt-2 bg-white/30 rounded-lg px-3 py-1 inline-block">
+                                Predikat: <?= $predikat ?> (<?= $ket_predikat ?>)
                             </div>
                         </div>
                         
@@ -156,7 +225,10 @@ require_once '../includes/header.php';
                         <div>
                             <div class="text-xs text-gray-500 mb-1">Nilai Akhir</div>
                             <div class="text-3xl font-bold text-green-600">
-                                <?= number_format($sertifikat['penilaian_final'], 2) ?>
+                                <?= number_format($nilai_akhir_hitung, 2) ?>
+                            </div>
+                            <div class="text-sm font-semibold text-gray-600 mt-1">
+                                Predikat: <span class="text-blue-600"><?= $predikat ?></span>
                             </div>
                         </div>
                     </div>
@@ -172,24 +244,32 @@ require_once '../includes/header.php';
                     
                     <div class="space-y-3">
                         <div class="flex justify-between items-center pb-2 border-b border-gray-100">
-                            <span class="text-sm text-gray-600">Disiplin</span>
+                            <span class="text-sm text-gray-600">Kedisiplinan <span class="text-xs text-gray-400">(<?= number_format($bobot_per_aspek, 1) ?>%)</span></span>
                             <span class="font-bold text-blue-600"><?= $penilaian['disiplin'] ?></span>
                         </div>
                         <div class="flex justify-between items-center pb-2 border-b border-gray-100">
-                            <span class="text-sm text-gray-600">Kerjasama</span>
+                            <span class="text-sm text-gray-600">Kerjasama <span class="text-xs text-gray-400">(<?= number_format($bobot_per_aspek, 1) ?>%)</span></span>
                             <span class="font-bold text-blue-600"><?= $penilaian['kerjasama'] ?></span>
                         </div>
                         <div class="flex justify-between items-center pb-2 border-b border-gray-100">
-                            <span class="text-sm text-gray-600">Inisiatif</span>
+                            <span class="text-sm text-gray-600">Inisiatif <span class="text-xs text-gray-400">(<?= number_format($bobot_per_aspek, 1) ?>%)</span></span>
                             <span class="font-bold text-blue-600"><?= $penilaian['inisiatif'] ?></span>
                         </div>
                         <div class="flex justify-between items-center pb-2 border-b border-gray-100">
-                            <span class="text-sm text-gray-600">Kualitas Kerja</span>
+                            <span class="text-sm text-gray-600">Kerajinan <span class="text-xs text-gray-400">(<?= number_format($bobot_per_aspek, 1) ?>%)</span></span>
+                            <span class="font-bold text-blue-600"><?= $penilaian['kerajinan'] ?? 0 ?></span>
+                        </div>
+                        <div class="flex justify-between items-center pb-2 border-b border-gray-100">
+                            <span class="text-sm text-gray-600">Kualitas Kerja <span class="text-xs text-gray-400">(<?= number_format($bobot_per_aspek, 1) ?>%)</span></span>
                             <span class="font-bold text-blue-600"><?= $penilaian['kualitas_kerja'] ?></span>
                         </div>
-                        <div class="flex justify-between items-center pt-2">
-                            <span class="text-sm font-bold text-gray-800">Rata-rata</span>
-                            <span class="font-bold text-lg text-green-600"><?= number_format($penilaian['nilai_rata_rata'], 2) ?></span>
+                        <div class="flex justify-between items-center pb-2 border-b border-gray-100 bg-blue-50 -mx-4 px-4 py-2 rounded-lg">
+                            <span class="text-sm text-gray-600">Kehadiran <span class="text-xs text-gray-400">(<?= $total_hadir ?>/<?= $total_hari ?> hari - <?= $bobot_hadir ?>%)</span></span>
+                            <span class="font-bold text-blue-600"><?= number_format($nilai_kehadiran, 2) ?></span>
+                        </div>
+                        <div class="flex justify-between items-center pt-3 bg-gradient-to-r from-green-50 to-emerald-50 -mx-4 px-4 py-3 rounded-lg border border-green-200">
+                            <span class="text-sm font-bold text-gray-800">Nilai Akhir</span>
+                            <span class="font-bold text-xl text-green-600"><?= number_format($nilai_akhir_hitung, 2) ?> <span class="text-sm">(<?= $predikat ?>)</span></span>
                         </div>
                     </div>
                 </div>

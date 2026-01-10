@@ -113,6 +113,70 @@ $peserta_list = db()->query("
     ORDER BY u.nama
 ")->fetchAll();
 
+// =============================================
+// FUNGSI HITUNG NILAI AKHIR (SAMA DENGAN CETAK.PHP)
+// =============================================
+function hitungNilaiAkhir($peserta_id) {
+    // Ambil settings bobot
+    $bobot_hadir = intval(get_setting('sertifikat_bobot_hadir', 60));
+    $bobot_laporan = intval(get_setting('sertifikat_bobot_laporan', 40));
+    $total_hari = intval(get_setting('absensi_max_hari', 30));
+    
+    // VALIDASI: Pastikan total bobot = 100%
+    if (($bobot_hadir + $bobot_laporan) != 100) {
+        $bobot_hadir = 60;
+        $bobot_laporan = 40;
+    }
+    
+    // Ambil data penilaian
+    $stmt = db()->prepare("SELECT disiplin, kerjasama, inisiatif, kerajinan, kualitas_kerja FROM penilaian WHERE peserta_id = ?");
+    $stmt->execute([$peserta_id]);
+    $penilaian = $stmt->fetch();
+    
+    // Ambil data kehadiran
+    $stmt2 = db()->prepare("SELECT COUNT(*) as total FROM absensi WHERE peserta_id = ? AND status = 'hadir'");
+    $stmt2->execute([$peserta_id]);
+    $kehadiran = $stmt2->fetch();
+    $total_hadir = intval($kehadiran['total'] ?? 0);
+    
+    // Hitung nilai kehadiran (skala 0-100)
+    if ($total_hari > 0) {
+        $nilai_kehadiran = ($total_hadir / $total_hari) * 100;
+        $nilai_kehadiran = min($nilai_kehadiran, 100);
+    } else {
+        $nilai_kehadiran = 0;
+    }
+    
+    // Hitung rata-rata kinerja (5 aspek)
+    if ($penilaian) {
+        $aspek = [
+            floatval($penilaian['disiplin'] ?? 0),
+            floatval($penilaian['kerjasama'] ?? 0),
+            floatval($penilaian['inisiatif'] ?? 0),
+            floatval($penilaian['kerajinan'] ?? 0),
+            floatval($penilaian['kualitas_kerja'] ?? 0)
+        ];
+        $rata_kinerja = array_sum($aspek) / count($aspek);
+    } else {
+        $rata_kinerja = 0;
+    }
+    
+    // Hitung nilai akhir
+    $kontribusi_kinerja = $rata_kinerja * $bobot_laporan / 100;
+    $kontribusi_hadir = $nilai_kehadiran * $bobot_hadir / 100;
+    
+    return $kontribusi_kinerja + $kontribusi_hadir;
+}
+
+// Fungsi predikat
+function getPredikatAdmin($nilai) {
+    if ($nilai >= 90) return 'A';
+    if ($nilai >= 80) return 'B';
+    if ($nilai >= 70) return 'C';
+    if ($nilai >= 60) return 'D';
+    return 'E';
+}
+
 $page_title = 'Kelola Sertifikat';
 require_once '../includes/header.php';
 ?>
@@ -182,8 +246,15 @@ require_once '../includes/header.php';
                                 <p class="text-xs text-gray-500"><?= htmlspecialchars($s['instansi']) ?></p>
                             </td>
                             <td class="p-4 text-center">
+                                <?php 
+                                $nilai_hitung = hitungNilaiAkhir($s['user_id']);
+                                $predikat = getPredikatAdmin($nilai_hitung);
+                                ?>
                                 <span class="font-bold text-green-600 bg-green-50 px-2 py-1 rounded">
-                                    <?= number_format($s['penilaian_final'], 2) ?>
+                                    <?= number_format($nilai_hitung, 2) ?>
+                                </span>
+                                <span class="text-xs font-bold ml-1 px-1.5 py-0.5 rounded <?= $predikat == 'A' ? 'bg-blue-100 text-blue-700' : ($predikat == 'E' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700') ?>">
+                                    <?= $predikat ?>
                                 </span>
                             </td>
                             <td class="p-4 text-center text-sm text-gray-600">

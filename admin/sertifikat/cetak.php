@@ -42,7 +42,8 @@ class CertificateGenerator {
             'ttd_img_pembimbing' => '',
             // Default Bobot
             'sertifikat_bobot_hadir' => 60,
-            'sertifikat_bobot_laporan' => 40
+            'sertifikat_bobot_laporan' => 40,
+            'absensi_max_hari' => 30
         ];
         
         try {
@@ -65,8 +66,7 @@ class CertificateGenerator {
                     s.nomor_sertifikat, s.issued_date,
                     p.disiplin, p.kerjasama, p.inisiatif, p.kerajinan, p.kualitas_kerja, 
                     p.nilai_rata_rata,
-                    (SELECT COUNT(*) FROM absensi WHERE peserta_id = u.id AND status = 'hadir') as total_hadir,
-                    (SELECT COUNT(*) FROM absensi WHERE peserta_id = u.id) as total_hari
+                    (SELECT COUNT(*) FROM absensi WHERE peserta_id = u.id AND status = 'hadir') as total_hadir
                 FROM users u
                 LEFT JOIN sertifikat s ON u.id = s.peserta_id
                 LEFT JOIN penilaian p ON u.id = p.peserta_id
@@ -158,8 +158,15 @@ class CertificateGenerator {
         $html_ttd_pem    = $ttd_pem_src ? "<img src='{$ttd_pem_src}' class='ttd-image'>" : "<div class='ttd-spacer'></div>";
 
         // --- 2. KALKULASI NILAI (AKUMULASI) ---
+        // VALIDASI: Pastikan total bobot = 100%
         $bobot_hadir   = (int)$settings['sertifikat_bobot_hadir'];
         $bobot_laporan = (int)$settings['sertifikat_bobot_laporan'];
+        
+        // Jika total bobot tidak = 100%, gunakan default (60/40)
+        if (($bobot_hadir + $bobot_laporan) != 100) {
+            $bobot_hadir = 60;
+            $bobot_laporan = 40;
+        }
 
         // Nilai Kinerja (5 Aspek)
         $aspek_kinerja = [
@@ -172,15 +179,27 @@ class CertificateGenerator {
         $rata_kinerja = array_sum($aspek_kinerja) / count($aspek_kinerja);
 
         // Nilai Absensi (Aspek ke-6)
-        $total_hari  = intval($data['total_hari'] ?? 0);
+        // Total hari dari settings (ditentukan admin)
+        $total_hari  = intval($settings['absensi_max_hari'] ?? 30);
         $total_hadir = intval($data['total_hadir'] ?? 0);
-        $nilai_absensi = ($total_hari > 0) ? ($total_hadir / $total_hari) * 100 : 0;
+        
+        // PERBAIKAN: Pastikan nilai kehadiran dalam skala 0-100
+        // Jika total_hari = 0, default ke 0% kehadiran
+        // Jika hadir > total_hari (data anomali), batasi maksimal 100%
+        if ($total_hari > 0) {
+            $nilai_absensi = ($total_hadir / $total_hari) * 100;
+            // Batasi maksimal 100% (mencegah anomali data)
+            $nilai_absensi = min($nilai_absensi, 100);
+        } else {
+            $nilai_absensi = 0;
+        }
 
         // Gabungkan untuk Tabel Transkrip
         $all_grades = $aspek_kinerja;
         $all_grades['Kehadiran / Absensi'] = $nilai_absensi;
 
-        // Nilai Akhir (Weighted)
+        // Nilai Akhir (Weighted) - menggunakan formula akumulatif
+        // Kontribusi dari 5 aspek kinerja + kontribusi kehadiran
         $nilai_akhir = ($rata_kinerja * $bobot_laporan / 100) + ($nilai_absensi * $bobot_hadir / 100);
 
         // --- 3. HTML TEMPLATE ---
@@ -188,6 +207,7 @@ class CertificateGenerator {
         <!DOCTYPE html>
         <html>
         <head>
+            <meta charset='UTF-8'>
             <title>Sertifikat $nama</title>
             <style>
                 @page { margin: 0px; size: A4 landscape; }
@@ -235,8 +255,8 @@ class CertificateGenerator {
                 .table-info { width: 70%; margin: 0 auto 25px auto; border-collapse: collapse; font-size: 14px; }
                 .table-info td { padding: 5px; vertical-align: top; }
                 
-                .table-nilai { width: 80%; margin: 0 auto; border-collapse: collapse; font-size: 14px; }
-                .table-nilai th, .table-nilai td { border: 1px solid #000; padding: 8px; text-align: center; }
+                .table-nilai { width: 95%; margin: 0 auto; border-collapse: collapse; font-size: 13px; }
+                .table-nilai th, .table-nilai td { border: 1px solid #000; padding: 6px 8px; text-align: center; }
                 .table-nilai th { background: #f4f4f4; font-weight: bold; }
                 .text-left { text-align: left !important; padding-left: 15px !important; }
                 
@@ -300,41 +320,73 @@ class CertificateGenerator {
                 <table class='table-nilai'>
                     <thead>
                         <tr>
-                            <th width='10%'>No</th>
-                            <th width='50%'>Aspek Penilaian</th>
-                            <th width='20%'>Nilai</th>
-                            <th width='20%'>Predikat</th>
+                            <th width='8%'>No</th>
+                            <th width='35%'>Komponen Penilaian</th>
+                            <th width='15%'>Nilai</th>
+                            <th width='12%'>Bobot</th>
+                            <th width='15%'>Kontribusi</th>
+                            <th width='15%'>Predikat</th>
                         </tr>
                     </thead>
                     <tbody>";
-                    
-                    $no = 1;
-                    foreach ($all_grades as $key => $val) {
-                        $v_float = floatval($val);
-                        list($grade, $ket) = $this->getPredikat($v_float);
-                        $html .= "
+                        
+                        // Bobot per komponen (5 aspek kinerja + 1 kehadiran = 6 komponen)
+                        // Aspek kinerja total = bobot_laporan, dibagi 5 aspek
+                        $bobot_per_aspek = $bobot_laporan / 5;
+                        
+                        // Loop 5 aspek kinerja dengan bobot masing-masing
+                        $no = 1;
+                        foreach ($aspek_kinerja as $key => $val) {
+                            $v_float = floatval($val);
+                            $kontribusi = $v_float * $bobot_per_aspek / 100;
+                            list($grade, $ket) = $this->getPredikat($v_float);
+                            $html .= "
                         <tr>
                             <td>$no</td>
                             <td class='text-left'>$key</td>
                             <td>" . number_format($v_float, 2) . "</td>
+                            <td>" . number_format($bobot_per_aspek, 2) . "%</td>
+                            <td>" . number_format($kontribusi, 2) . "</td>
                             <td>$grade</td>
                         </tr>";
-                        $no++;
-                    }
-                    
-                    list($finalGrade, $finalKet) = $this->getPredikat($nilai_akhir);
-
+                            $no++;
+                        }
+                        
+                        // Kehadiran (komponen ke-6)
+                        $kontribusi_hadir = $nilai_absensi * $bobot_hadir / 100;
+                        list($gradeHadir, $ketHadir) = $this->getPredikat($nilai_absensi);
+                        $html .= "
+                        <tr>
+                            <td>6</td>
+                            <td class='text-left'>Kehadiran ({$total_hadir}/{$total_hari} hari)</td>
+                            <td>" . number_format($nilai_absensi, 2) . "</td>
+                            <td>" . number_format($bobot_hadir, 2) . "%</td>
+                            <td>" . number_format($kontribusi_hadir, 2) . "</td>
+                            <td>$gradeHadir</td>
+                        </tr>";
+                        
+                        // NILAI AKHIR
+                        // Hitung ulang nilai akhir berdasarkan kontribusi semua komponen
+                        $total_kontribusi = 0;
+                        foreach ($aspek_kinerja as $val) {
+                            $v = floatval($val);
+                            $total_kontribusi += $v * $bobot_per_aspek / 100;
+                        }
+                        $total_kontribusi += $kontribusi_hadir;
+                        
+                        list($finalGrade, $finalKet) = $this->getPredikat($total_kontribusi);
+                        
         $html .= "
-                        <tr style='background:#f4f4f4; font-weight:bold;'>
-                            <td colspan='2' style='text-align:right; padding-right:15px;'>NILAI AKHIR</td>
-                            <td>" . number_format($nilai_akhir, 2) . "</td>
+                        <tr style='background:#1a4d80; color:#fff; font-weight:bold;'>
+                            <td colspan='4' style='text-align:right; padding-right:15px;'>NILAI AKHIR</td>
+                            <td>" . number_format($total_kontribusi, 2) . "</td>
                             <td>$finalGrade</td>
                         </tr>
                     </tbody>
                 </table>
                 
                 <div class='footer-note'>
-                    * Nilai Akhir dihitung berdasarkan bobot $bobot_laporan% Nilai Kinerja dan $bobot_hadir% Kehadiran.
+                    * Predikat: A (&gt;=90 Sangat Memuaskan), B (&gt;=80 Memuaskan), C (&gt;=70 Cukup), D (&gt;=60 Kurang), E (&lt;60 Tidak Lulus)
                 </div>
             </div>
 

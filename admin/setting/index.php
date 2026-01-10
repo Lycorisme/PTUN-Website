@@ -246,9 +246,9 @@ require_once '../includes/header.php';
                             <h3 class="font-bold text-purple-900 mb-4">Pengaturan Operasional</h3>
                             
                             <div class="mb-4">
-                                <label class="block text-sm font-bold text-gray-700 mb-1">Maksimal Hari Kerja/Bulan</label>
-                                <input type="number" name="absensi_max_hari" min="1" max="31" value="<?= get_setting('absensi_max_hari', 22) ?>" class="w-full border border-purple-200 rounded-lg px-3 py-2">
-                                <p class="text-xs text-gray-500 mt-1">Digunakan untuk menghitung % kehadiran.</p>
+                                <label class="block text-sm font-bold text-gray-700 mb-1">Target Hari Kerja Magang</label>
+                                <input type="number" name="absensi_max_hari" min="1" value="<?= get_setting('absensi_max_hari', 22) ?>" class="w-full border border-purple-200 rounded-lg px-3 py-2">
+                                <p class="text-xs text-gray-500 mt-1">Total hari kerja magang (tanpa batasan). Digunakan untuk menghitung % kehadiran.</p>
                             </div>
 
                             <div class="mb-4">
